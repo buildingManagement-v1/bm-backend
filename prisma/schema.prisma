@@ -88,19 +88,84 @@ model User {
   @@map("users")
 }
 
+enum ManagerRole {
+  tenant_manager
+  payment_manager
+  maintenance_manager
+  operations_manager
+  reports_viewer
+}
+
 model Manager {
-  id                           String      @id @default(uuid())
-  userId                       String      @map("user_id")
+  id                           String         @id @default(uuid())
+  userId                       String         @map("user_id")
   name                         String
-  email                        String      @unique
-  passwordHash                 String      @map("password_hash")
+  email                        String         @unique
+  passwordHash                 String         @map("password_hash")
   phone                        String?
-  status                       UserStatus  @default(active)
-  mustResetPassword            Boolean     @default(true) @map("must_reset_password")
-  passwordChangedAt            DateTime?   @map("password_changed_at")
-  lastLoginAt                  DateTime?   @map("last_login_at")
-  createdAt                    DateTime    @default(now()) @map("created_at")
-  updatedAt                    DateTime    @updatedAt @map("updated_at")
+  status                       UserStatus     @default(active)
+  mustResetPassword            Boolean        @default(true) @map("must_reset_password")
+  passwordChangedAt            DateTime?      @map("password_changed_at")
+  lastLoginAt                  DateTime?      @map("last_login_at")
+  createdAt                    DateTime       @default(now()) @map("created_at")
+  updatedAt                    DateTime       @updatedAt @map("updated_at")
+
+  buildingRoles                ManagerBuildingRole[]
 
   @@map("managers")
+}
+
+enum PlanStatus {
+  active
+  inactive
+}
+
+model SubscriptionPlan {
+  id            String      @id @default(uuid())
+  name          String      @unique
+  buildingPrice Decimal     @map("building_price")
+  managerPrice  Decimal     @map("manager_price")
+  features      Json
+  status        PlanStatus  @default(active)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@map("subscription_plans")
+}
+
+model Building {
+  id               String      @id @default(uuid())
+  userId           String      @map("user_id")
+  name             String
+  address          String?
+  city             String?
+  country          String?
+  contactEmail     String?     @map("contact_email")
+  contactPhone     String?     @map("contact_phone")
+  logoUrl          String?     @map("logo_url")
+  settings         Json?
+  status           UserStatus  @default(active)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  managerRoles     ManagerBuildingRole[]
+
+  @@map("buildings")
+}
+
+model ManagerBuildingRole {
+  id          String         @id @default(uuid())
+  managerId   String         @map("manager_id")
+  buildingId  String         @map("building_id")
+  roles       ManagerRole[]
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  manager     Manager        @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  building    Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, buildingId])
+  @@index([managerId])
+  @@index([buildingId])
+  @@map("manager_building_roles")
 }

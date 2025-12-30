@@ -6,6 +6,8 @@ import { TokenModule } from './common/token/token.module';
 import { EmailModule } from './common/email/email.module';
 import { AuthModule as UserAuthModule } from './modules/user/auth/auth.module';
 import { AuthModule as ManagerAuthModule } from './modules/manager/auth/auth.module';
+import { PlansModule } from './modules/platform-admin/plans/plans.module';
+import { ManagersModule } from './modules/user/managers/managers.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { AuthModule as ManagerAuthModule } from './modules/manager/auth/auth.mod
     AuthModule,
     UserAuthModule,
     ManagerAuthModule,
+    PlansModule,
+    ManagersModule,
   ],
 })
 export class AppModule {}
