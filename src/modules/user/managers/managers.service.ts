@@ -179,6 +179,22 @@ export class ManagersService {
       }
     }
 
+    // If updating building assignments, verify buildings belong to user
+    if (dto.buildingAssignments) {
+      const buildings = await this.prisma.building.findMany({
+        where: {
+          id: { in: dto.buildingAssignments.map((a) => a.buildingId) },
+          userId,
+        },
+      });
+
+      if (buildings.length !== dto.buildingAssignments.length) {
+        throw new ForbiddenException(
+          'One or more buildings do not belong to you',
+        );
+      }
+    }
+
     const updateData: {
       name?: string;
       email?: string;
@@ -196,19 +212,58 @@ export class ManagersService {
       updateData.passwordHash = await bcrypt.hash(dto.password, 10);
     }
 
-    const updated = await this.prisma.manager.update({
+    // Update manager basic info
+    await this.prisma.manager.update({
       where: { id: managerId },
       data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        status: true,
+    });
+
+    // Update building assignments if provided
+    if (dto.buildingAssignments) {
+      // Delete existing building roles
+      await this.prisma.managerBuildingRole.deleteMany({
+        where: { managerId },
+      });
+
+      // Create new building roles
+      await this.prisma.managerBuildingRole.createMany({
+        data: dto.buildingAssignments.map((assignment) => ({
+          managerId,
+          buildingId: assignment.buildingId,
+          roles: assignment.roles,
+        })),
+      });
+    }
+
+    // Return updated manager with building assignments
+    const managerWithRoles = await this.prisma.manager.findUnique({
+      where: { id: managerId },
+      include: {
+        buildingRoles: {
+          include: {
+            building: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return updated;
+    return {
+      id: managerWithRoles!.id,
+      name: managerWithRoles!.name,
+      email: managerWithRoles!.email,
+      phone: managerWithRoles!.phone,
+      status: managerWithRoles!.status,
+      buildings: managerWithRoles!.buildingRoles.map((br) => ({
+        buildingId: br.buildingId,
+        buildingName: br.building.name,
+        roles: br.roles,
+      })),
+    };
   }
 
   async remove(userId: string, managerId: string) {

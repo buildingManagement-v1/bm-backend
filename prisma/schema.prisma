@@ -147,6 +147,14 @@ model Building {
   status           UserStatus  @default(active)
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
+  
+  tenants              Tenant[]
+  leases               Lease[]
+  maintenanceRequests  MaintenanceRequest[]
+  payments             Payment[]
+  invoices             Invoice[]
+  announcements        Announcement[]
+  utilityReadings      UtilityReading[]
 
   managerRoles     ManagerBuildingRole[]
   units            Unit[]
@@ -197,10 +205,230 @@ model Unit {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
+  tenants              Tenant[]
+  leases               Lease[]
+  maintenanceRequests  MaintenanceRequest[]
+  payments             Payment[]
+  invoices             Invoice[]
+
   building    Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@unique([buildingId, unitNumber])
   @@index([buildingId])
   @@index([status])
   @@map("units")
+}
+
+enum TenantStatus {
+  active
+  inactive
+}
+
+model Tenant {
+  id                           String        @id @default(uuid())
+  buildingId                   String        @map("building_id")
+  unitId                       String?       @map("unit_id")
+  name                         String
+  email                        String        @unique
+  phone                        String?
+  passwordHash                 String?       @map("password_hash")
+  status                       TenantStatus  @default(active)
+  mustResetPassword            Boolean       @default(false) @map("must_reset_password")
+  passwordChangedAt            DateTime?     @map("password_changed_at")
+  lastLoginAt                  DateTime?     @map("last_login_at")
+  createdAt                    DateTime      @default(now()) @map("created_at")
+  updatedAt                    DateTime      @updatedAt @map("updated_at")
+
+  building                     Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit                         Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  leases                       Lease[]
+  maintenanceRequests          MaintenanceRequest[]
+  payments                     Payment[]
+
+  @@index([buildingId])
+  @@index([unitId])
+  @@map("tenants")
+}
+
+enum LeaseStatus {
+  active
+  expired
+  terminated
+}
+
+model Lease {
+  id              String        @id @default(uuid())
+  tenantId        String        @map("tenant_id")
+  unitId          String        @map("unit_id")
+  buildingId      String        @map("building_id")
+  startDate       DateTime      @map("start_date")
+  endDate         DateTime      @map("end_date")
+  rentAmount      Decimal       @map("rent_amount")
+  securityDeposit Decimal?      @map("security_deposit")
+  status          LeaseStatus   @default(active)
+  terms           Json?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit            Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([unitId])
+  @@index([buildingId])
+  @@index([status])
+  @@map("leases")
+}
+
+enum MaintenanceRequestStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
+enum MaintenanceRequestPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model MaintenanceRequest {
+  id              String                      @id @default(uuid())
+  buildingId      String                      @map("building_id")
+  unitId          String?                     @map("unit_id")
+  tenantId        String                      @map("tenant_id")
+  title           String
+  description     String
+  priority        MaintenanceRequestPriority  @default(medium)
+  status          MaintenanceRequestStatus    @default(pending)
+  attachments     Json?
+  notes           Json?  
+  completedAt     DateTime?                   @map("completed_at")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+
+  building        Building                    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit            Unit?                       @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant          Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("maintenance_requests")
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+  cancelled
+}
+
+enum PaymentType {
+  rent
+  utility
+  deposit
+  other
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  buildingId      String        @map("building_id")
+  unitId          String?       @map("unit_id")
+  tenantId        String        @map("tenant_id")
+  invoiceId       String?       @map("invoice_id")
+  amount          Decimal
+  type            PaymentType
+  status          PaymentStatus @default(pending)
+  paymentDate     DateTime      @map("payment_date")
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit            Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([buildingId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payments")
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  overdue
+  cancelled
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  buildingId      String        @map("building_id")
+  unitId          String?       @map("unit_id")
+  tenantId        String        @map("tenant_id")
+  invoiceNumber   String        @unique @map("invoice_number")
+  amount          Decimal
+  dueDate         DateTime      @map("due_date")
+  status          InvoiceStatus @default(draft)
+  items           Json
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit            Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  payments        Payment[]
+
+  @@index([buildingId])
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Announcement {
+  id              String        @id @default(uuid())
+  buildingId      String        @map("building_id")
+  title           String
+  content         String
+  priority        String?
+  publishedAt     DateTime?     @map("published_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
+  @@map("announcements")
+}
+
+enum UtilityType {
+  electricity
+  water
+}
+
+model UtilityReading {
+  id              String        @id @default(uuid())
+  buildingId      String        @map("building_id")
+  type            UtilityType
+  reading         Decimal
+  readingDate     DateTime      @map("reading_date")
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
+  @@index([type])
+  @@map("utility_readings")
 }

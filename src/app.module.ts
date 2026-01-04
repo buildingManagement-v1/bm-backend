@@ -11,7 +11,7 @@ import { ManagersModule } from './modules/user/managers/managers.module';
 import { BuildingsModule } from './modules/user/buildings/buildings.module';
 import { UnitsModule } from './modules/user/units/units.module';
 import { BuildingContextMiddleware } from './common/middleware/building-context.middleware';
-import { UnitsController } from './modules/user/units/units.controller';
+import { TenantsModule } from './modules/user/tenants/tenants.module';
 
 @Module({
   imports: [
@@ -26,10 +26,13 @@ import { UnitsController } from './modules/user/units/units.controller';
     ManagersModule,
     BuildingsModule,
     UnitsModule,
+    TenantsModule,
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(BuildingContextMiddleware).forRoutes(UnitsController);
+    consumer
+      .apply(BuildingContextMiddleware)
+      .forRoutes('v1/app/units', 'v1/app/tenants');
   }
 }

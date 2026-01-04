@@ -4,8 +4,20 @@ import {
   MinLength,
   IsEnum,
   IsOptional,
+  IsArray,
+  IsUUID,
+  ValidateNested,
 } from 'class-validator';
-import { UserStatus } from 'generated/prisma/client';
+import { Type } from 'class-transformer';
+import { UserStatus, ManagerRole } from 'generated/prisma/client';
+
+class BuildingRoleAssignment {
+  @IsUUID()
+  buildingId: string;
+
+  @IsArray()
+  roles: ManagerRole[];
+}
 
 export class UpdateManagerDto {
   @IsString()
@@ -28,4 +40,10 @@ export class UpdateManagerDto {
   @IsEnum(UserStatus)
   @IsOptional()
   status?: UserStatus;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BuildingRoleAssignment)
+  @IsOptional()
+  buildingAssignments?: BuildingRoleAssignment[];
 }
