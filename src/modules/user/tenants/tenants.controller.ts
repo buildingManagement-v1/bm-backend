@@ -28,11 +28,16 @@ export class TenantsController {
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
   async create(
-    @User() user: { id: string },
+    @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
     @Body() dto: CreateTenantDto,
   ) {
-    const result = await this.tenantsService.create(buildingId, user.id, dto);
+    const result = await this.tenantsService.create(
+      buildingId,
+      user.id,
+      user.role,
+      dto,
+    );
     return {
       success: true,
       data: result,
@@ -73,7 +78,7 @@ export class TenantsController {
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
   async update(
-    @User() user: { id: string },
+    @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
     @Param('id') id: string,
     @Body() dto: UpdateTenantDto,
@@ -82,6 +87,7 @@ export class TenantsController {
       id,
       buildingId,
       user.id,
+      user.role,
       dto,
     );
     return {
@@ -95,11 +101,16 @@ export class TenantsController {
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
   async remove(
-    @User() user: { id: string },
+    @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
     @Param('id') id: string,
   ) {
-    const result = await this.tenantsService.remove(id, buildingId);
+    const result = await this.tenantsService.remove(
+      id,
+      buildingId,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,

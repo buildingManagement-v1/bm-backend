@@ -27,11 +27,16 @@ export class UnitsController {
   @Post()
   @UseGuards(OwnerOnlyGuard)
   async create(
-    @User() user: { id: string },
+    @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
     @Body() dto: CreateUnitDto,
   ) {
-    const result = await this.unitsService.create(buildingId, dto);
+    const result = await this.unitsService.create(
+      buildingId,
+      dto,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,
@@ -66,10 +71,17 @@ export class UnitsController {
   @RequireManagerRoles(ManagerRole.tenant_manager)
   async update(
     @BuildingId() buildingId: string,
+    @User() user: { id: string; role: string },
     @Param('id') id: string,
     @Body() dto: UpdateUnitDto,
   ) {
-    const result = await this.unitsService.update(buildingId, id, dto);
+    const result = await this.unitsService.update(
+      buildingId,
+      id,
+      dto,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,
@@ -79,8 +91,17 @@ export class UnitsController {
 
   @Delete(':id')
   @UseGuards(OwnerOnlyGuard)
-  async remove(@BuildingId() buildingId: string, @Param('id') id: string) {
-    const result = await this.unitsService.remove(buildingId, id);
+  async remove(
+    @BuildingId() buildingId: string,
+    @Param('id') id: string,
+    @User() user: { id: string; role: string },
+  ) {
+    const result = await this.unitsService.remove(
+      buildingId,
+      id,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,

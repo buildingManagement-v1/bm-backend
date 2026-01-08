@@ -5,12 +5,22 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUnitDto, UpdateUnitDto } from './dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { Prisma } from 'generated/prisma/browser';
 
 @Injectable()
 export class UnitsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
-  async create(buildingId: string, dto: CreateUnitDto) {
+  async create(
+    buildingId: string,
+    dto: CreateUnitDto,
+    userId: string,
+    userRole: string,
+  ) {
     const existingUnit = await this.prisma.unit.findUnique({
       where: {
         buildingId_unitNumber: {
@@ -44,6 +54,19 @@ export class UnitsService {
           },
         },
       },
+    });
+
+    const userName = await this.getUserName(userId, userRole);
+
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'unit',
+      entityId: unit.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { unitNumber: unit.unitNumber, type: unit.type },
     });
 
     return unit;
@@ -90,7 +113,13 @@ export class UnitsService {
     return unit;
   }
 
-  async update(buildingId: string, id: string, dto: UpdateUnitDto) {
+  async update(
+    buildingId: string,
+    id: string,
+    dto: UpdateUnitDto,
+    userId: string,
+    userRole: string,
+  ) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
     });
@@ -140,10 +169,28 @@ export class UnitsService {
       },
     });
 
+    const userName = await this.getUserName(userId, userRole);
+
+    await this.activityLogsService.create({
+      action: 'update',
+      entityType: 'unit',
+      entityId: updatedUnit.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { changes: { ...dto } } as Prisma.InputJsonValue,
+    });
+
     return updatedUnit;
   }
 
-  async remove(buildingId: string, id: string) {
+  async remove(
+    buildingId: string,
+    id: string,
+    userId: string,
+    userRole: string,
+  ) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
     });
@@ -160,6 +207,35 @@ export class UnitsService {
       where: { id },
     });
 
+    const userName = await this.getUserName(userId, userRole);
+
+    await this.activityLogsService.create({
+      action: 'delete',
+      entityType: 'unit',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { unitNumber: unit.unitNumber },
+    });
+
     return { message: 'Unit deleted successfully' };
+  }
+
+  // Helper function
+  private async getUserName(userId: string, userRole: string): Promise<string> {
+    if (userRole === 'manager') {
+      const manager = await this.prisma.manager.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      return manager?.name || 'Unknown';
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return user?.name || 'Unknown';
   }
 }

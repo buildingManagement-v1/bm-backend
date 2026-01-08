@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { CreateLeaseDto, UpdateLeaseDto } from './dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 const leaseInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -14,9 +15,17 @@ const leaseInclude = {
 
 @Injectable()
 export class LeasesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
-  async create(buildingId: string, dto: CreateLeaseDto) {
+  async create(
+    buildingId: string,
+    dto: CreateLeaseDto,
+    userId: string,
+    userRole: string,
+  ) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: dto.tenantId, buildingId },
     });
@@ -92,6 +101,25 @@ export class LeasesService {
       return newLease;
     });
 
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'lease',
+      entityId: lease.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        tenantId: lease.tenantId,
+        unitId: lease.unitId,
+        startDate: lease.startDate,
+        endDate: lease.endDate,
+      } as Prisma.InputJsonValue,
+    });
+
+    return lease;
+
     return lease;
   }
 
@@ -116,7 +144,13 @@ export class LeasesService {
     return lease;
   }
 
-  async update(id: string, buildingId: string, dto: UpdateLeaseDto) {
+  async update(
+    id: string,
+    buildingId: string,
+    dto: UpdateLeaseDto,
+    userId: string,
+    userRole: string,
+  ) {
     const lease = await this.prisma.lease.findFirst({
       where: { id, buildingId },
     });
@@ -138,10 +172,27 @@ export class LeasesService {
       include: leaseInclude,
     });
 
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'update',
+      entityType: 'lease',
+      entityId: updated.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { changes: { ...dto } } as Prisma.InputJsonValue,
+    });
+
     return updated;
   }
 
-  async remove(id: string, buildingId: string) {
+  async remove(
+    id: string,
+    buildingId: string,
+    userId: string,
+    userRole: string,
+  ) {
     const lease = await this.prisma.lease.findFirst({
       where: { id, buildingId },
     });
@@ -152,6 +203,21 @@ export class LeasesService {
 
     await this.prisma.lease.delete({
       where: { id },
+    });
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'delete',
+      entityType: 'lease',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        tenantId: lease.tenantId,
+        unitId: lease.unitId,
+      } as Prisma.InputJsonValue,
     });
 
     return { message: 'Lease deleted successfully' };
@@ -170,5 +236,20 @@ export class LeasesService {
     }
 
     return months;
+  }
+
+  private async getUserName(userId: string, userRole: string): Promise<string> {
+    if (userRole === 'manager') {
+      const manager = await this.prisma.manager.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      return manager?.name || 'Unknown';
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return user?.name || 'Unknown';
   }
 }

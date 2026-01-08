@@ -8,10 +8,15 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateManagerDto, UpdateManagerDto } from './dto';
 import * as bcrypt from 'bcrypt';
 import { UserStatus } from 'generated/prisma/enums';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { Prisma } from 'generated/prisma/browser';
 
 @Injectable()
 export class ManagersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
   async create(userId: string, dto: CreateManagerDto) {
     // Check if email already exists
@@ -67,6 +72,29 @@ export class ManagersService {
         },
       },
     });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    const userName = user?.name || 'Unknown';
+
+    for (const assignment of dto.buildingAssignments) {
+      await this.activityLogsService.create({
+        action: 'create',
+        entityType: 'manager',
+        entityId: manager.id,
+        userId,
+        userName,
+        userRole: 'owner',
+        buildingId: assignment.buildingId,
+        details: {
+          managerName: manager.name,
+          managerEmail: manager.email,
+          roles: assignment.roles,
+        } as Prisma.InputJsonValue,
+      });
+    }
 
     return {
       id: manager.id,
@@ -252,6 +280,37 @@ export class ManagersService {
       },
     });
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    const userName = user?.name || 'Unknown';
+
+    const currentAssignments = await this.prisma.managerBuildingRole.findMany({
+      where: { managerId },
+      select: { buildingId: true },
+    });
+
+    for (const assignment of currentAssignments) {
+      await this.activityLogsService.create({
+        action: 'update',
+        entityType: 'manager',
+        entityId: managerId,
+        userId,
+        userName,
+        userRole: 'owner',
+        buildingId: assignment.buildingId,
+        details: {
+          changes: {
+            name: dto.name,
+            email: dto.email,
+            phone: dto.phone,
+            status: dto.status,
+          },
+        } as Prisma.InputJsonValue,
+      });
+    }
+
     return {
       id: managerWithRoles!.id,
       name: managerWithRoles!.name,
@@ -276,6 +335,33 @@ export class ManagersService {
 
     if (!manager) {
       throw new NotFoundException('Manager not found');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    const userName = user?.name || 'Unknown';
+
+    const assignments = await this.prisma.managerBuildingRole.findMany({
+      where: { managerId },
+      select: { buildingId: true },
+    });
+
+    for (const assignment of assignments) {
+      await this.activityLogsService.create({
+        action: 'delete',
+        entityType: 'manager',
+        entityId: managerId,
+        userId,
+        userName,
+        userRole: 'owner',
+        buildingId: assignment.buildingId,
+        details: {
+          managerName: manager.name,
+          managerEmail: manager.email,
+        } as Prisma.InputJsonValue,
+      });
     }
 
     await this.prisma.manager.delete({

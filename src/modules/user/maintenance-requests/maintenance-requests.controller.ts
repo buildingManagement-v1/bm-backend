@@ -84,7 +84,7 @@ export class MaintenanceRequestsController {
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.maintenance_manager)
   async update(
-    @User() user: { name: string },
+    @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
     @Param('id') id: string,
     @Body() dto: UpdateMaintenanceRequestDto,
@@ -92,7 +92,8 @@ export class MaintenanceRequestsController {
     const result = await this.maintenanceRequestsService.update(
       id,
       buildingId,
-      user.name,
+      user.id,
+      user.role,
       dto,
     );
     return {

@@ -5,12 +5,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto';
+import { ActivityLogsService } from 'src/modules/user/activity-logs/activity-logs.service';
+import { Prisma } from 'generated/prisma/client';
 
 @Injectable()
 export class PlansService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
-  async create(dto: CreatePlanDto) {
+  async create(dto: CreatePlanDto, adminId: string, adminName: string) {
     const existing = await this.prisma.subscriptionPlan.findUnique({
       where: { name: dto.name },
     });
@@ -26,6 +31,19 @@ export class PlansService {
         managerPrice: dto.managerPrice,
         features: dto.features,
       },
+    });
+
+    await this.activityLogsService.createPlatformLog({
+      action: 'create',
+      entityType: 'subscription_plan',
+      entityId: plan.id,
+      adminId,
+      adminName,
+      details: {
+        name: plan.name,
+        buildingPrice: Number(plan.buildingPrice),
+        managerPrice: Number(plan.managerPrice),
+      } as Prisma.InputJsonValue,
     });
 
     return plan;
@@ -50,7 +68,12 @@ export class PlansService {
     return plan;
   }
 
-  async update(id: string, dto: UpdatePlanDto) {
+  async update(
+    id: string,
+    dto: UpdatePlanDto,
+    adminId: string,
+    adminName: string,
+  ) {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id },
     });
@@ -74,10 +97,29 @@ export class PlansService {
       data: dto,
     });
 
+    await this.activityLogsService.createPlatformLog({
+      action: 'update',
+      entityType: 'subscription_plan',
+      entityId: updated.id,
+      adminId,
+      adminName,
+      details: {
+        changes: {
+          name: dto.name,
+          buildingPrice: dto.buildingPrice
+            ? Number(dto.buildingPrice)
+            : undefined,
+          managerPrice: dto.managerPrice ? Number(dto.managerPrice) : undefined,
+          features: dto.features,
+          status: dto.status,
+        },
+      } as Prisma.InputJsonValue,
+    });
+
     return updated;
   }
 
-  async remove(id: string) {
+  async remove(id: string, adminId: string, adminName: string) {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id },
     });
@@ -88,6 +130,15 @@ export class PlansService {
 
     await this.prisma.subscriptionPlan.delete({
       where: { id },
+    });
+
+    await this.activityLogsService.createPlatformLog({
+      action: 'delete',
+      entityType: 'subscription_plan',
+      entityId: id,
+      adminId,
+      adminName,
+      details: { name: plan.name } as Prisma.InputJsonValue,
     });
 
     return { message: 'Plan deleted successfully' };

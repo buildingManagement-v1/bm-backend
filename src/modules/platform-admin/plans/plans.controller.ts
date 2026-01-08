@@ -13,6 +13,7 @@ import { CreatePlanDto, UpdatePlanDto } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { User } from 'src/common/decorators/user.decorator';
 
 @Controller('v1/platform/plans')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -21,8 +22,11 @@ export class PlansController {
 
   @Post()
   @Roles('super_admin')
-  async create(@Body() dto: CreatePlanDto) {
-    const result = await this.plansService.create(dto);
+  async create(
+    @Body() dto: CreatePlanDto,
+    @User() admin: { id: string; email: string },
+  ) {
+    const result = await this.plansService.create(dto, admin.id, admin.email);
     return {
       success: true,
       data: result,
@@ -64,8 +68,17 @@ export class PlansController {
 
   @Patch(':id')
   @Roles('super_admin')
-  async update(@Param('id') id: string, @Body() dto: UpdatePlanDto) {
-    const result = await this.plansService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdatePlanDto,
+    @User() admin: { id: string; email: string },
+  ) {
+    const result = await this.plansService.update(
+      id,
+      dto,
+      admin.id,
+      admin.email,
+    );
     return {
       success: true,
       data: result,
@@ -75,8 +88,11 @@ export class PlansController {
 
   @Delete(':id')
   @Roles('super_admin')
-  async remove(@Param('id') id: string) {
-    const result = await this.plansService.remove(id);
+  async remove(
+    @Param('id') id: string,
+    @User() admin: { id: string; email: string },
+  ) {
+    const result = await this.plansService.remove(id, admin.id, admin.email);
     return {
       success: true,
       data: result,

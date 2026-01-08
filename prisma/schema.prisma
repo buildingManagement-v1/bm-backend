@@ -460,3 +460,53 @@ model PaymentPeriod {
   @@unique([leaseId, month])
   @@map("payment_periods")
 }
+
+enum ActivityAction {
+  create
+  update
+  delete
+  status_change
+}
+
+enum ActivityEntityType {
+  unit
+  tenant
+  lease
+  payment
+  maintenance_request
+  manager
+  invoice
+  subscription_plan
+}
+
+model ActivityLog {
+  id          String              @id @default(uuid())
+  action      ActivityAction
+  entityType  ActivityEntityType  @map("entity_type")
+  entityId    String              @map("entity_id")
+  userId      String              @map("user_id")
+  userName    String              @map("user_name")
+  userRole    String              @map("user_role")
+  buildingId  String              @map("building_id")
+  details     Json?
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@index([buildingId])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model PlatformActivityLog {
+  id          String              @id @default(uuid())
+  action      ActivityAction
+  entityType  ActivityEntityType  @map("entity_type")
+  entityId    String              @map("entity_id")
+  adminId     String              @map("admin_id")
+  adminName   String              @map("admin_name")
+  details     Json?
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("platform_activity_logs")
+}

@@ -61,6 +61,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.paymentPeriod;
   }
 
+  get activityLog() {
+    return this.client.activityLog;
+  }
+
+  get platformActivityLog() {
+    return this.client.platformActivityLog;
+  }
+
   get announcement() {
     return this.client.announcement;
   }

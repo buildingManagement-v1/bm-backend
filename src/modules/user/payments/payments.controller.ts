@@ -1,12 +1,13 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { BuildingAccessGuard } from '../../../common/guards/building-access.guard';
-import { ManagerRolesGuard } from '../../../common/guards/manager-roles.guard';
-import { RequireManagerRoles } from '../../../common/decorators/require-manager-roles.decorator';
-import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
+import { User } from 'src/common/decorators/user.decorator';
+import { BuildingAccessGuard } from 'src/common/guards/building-access.guard';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
+import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
+import { BuildingId } from 'src/common/decorators/building-id.decorator';
 
 @Controller('v1/app/payments')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
@@ -19,8 +20,14 @@ export class PaymentsController {
   async create(
     @BuildingId() buildingId: string,
     @Body() dto: CreatePaymentDto,
+    @User() user: { id: string; role: string },
   ) {
-    const result = await this.paymentsService.create(buildingId, dto);
+    const result = await this.paymentsService.create(
+      buildingId,
+      dto,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,

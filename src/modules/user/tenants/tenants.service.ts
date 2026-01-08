@@ -6,12 +6,22 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { Prisma } from 'generated/prisma/browser';
 
 @Injectable()
 export class TenantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
-  async create(buildingId: string, userId: string, dto: CreateTenantDto) {
+  async create(
+    buildingId: string,
+    userId: string,
+    userRole: string,
+    dto: CreateTenantDto,
+  ) {
     const existingTenant = await this.prisma.tenant.findUnique({
       where: { email: dto.email },
     });
@@ -56,6 +66,22 @@ export class TenantsService {
         data: { status: 'occupied' },
       });
     }
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'tenant',
+      entityId: tenant.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        name: tenant.name,
+        email: tenant.email,
+        unitId: tenant.unitId,
+      } as Prisma.InputJsonValue,
+    });
 
     return {
       id: tenant.id,
@@ -147,6 +173,7 @@ export class TenantsService {
     id: string,
     buildingId: string,
     userId: string,
+    userRole: string,
     dto: UpdateTenantDto,
   ) {
     const tenant = await this.prisma.tenant.findFirst({
@@ -214,6 +241,18 @@ export class TenantsService {
       },
     });
 
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'update',
+      entityType: 'tenant',
+      entityId: updated.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { changes: { ...dto } } as Prisma.InputJsonValue,
+    });
+
     return {
       id: updated.id,
       buildingId: updated.buildingId,
@@ -228,7 +267,12 @@ export class TenantsService {
     };
   }
 
-  async remove(id: string, buildingId: string) {
+  async remove(
+    id: string,
+    buildingId: string,
+    userId: string,
+    userRole: string,
+  ) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id, buildingId },
     });
@@ -248,6 +292,36 @@ export class TenantsService {
       where: { id },
     });
 
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'delete',
+      entityType: 'tenant',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        name: tenant.name,
+        email: tenant.email,
+      } as Prisma.InputJsonValue,
+    });
+
     return { message: 'Tenant deleted successfully' };
+  }
+
+  private async getUserName(userId: string, userRole: string): Promise<string> {
+    if (userRole === 'manager') {
+      const manager = await this.prisma.manager.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      return manager?.name || 'Unknown';
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return user?.name || 'Unknown';
   }
 }

@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { CreatePaymentDto } from './dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -15,9 +16,17 @@ const paymentInclude = {
 
 @Injectable()
 export class PaymentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
-  async create(buildingId: string, dto: CreatePaymentDto) {
+  async create(
+    buildingId: string,
+    dto: CreatePaymentDto,
+    userId: string,
+    userRole: string,
+  ) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: dto.tenantId, buildingId },
       include: {
@@ -104,6 +113,23 @@ export class PaymentsService {
       });
     });
 
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'payment',
+      entityId: payment!.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        amount: payment!.amount,
+        type: payment!.type,
+        tenantId: payment!.tenantId,
+        invoiceNumber,
+      } as Prisma.InputJsonValue,
+    });
+
     return payment!;
   }
 
@@ -163,5 +189,20 @@ export class PaymentsService {
     const count = await this.prisma.invoice.count({ where: { buildingId } });
     const year = new Date().getFullYear();
     return `INV-${year}-${String(count + 1).padStart(5, '0')}`;
+  }
+
+  private async getUserName(userId: string, userRole: string): Promise<string> {
+    if (userRole === 'manager') {
+      const manager = await this.prisma.manager.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      return manager?.name || 'Unknown';
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return user?.name || 'Unknown';
   }
 }

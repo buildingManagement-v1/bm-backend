@@ -10,10 +10,14 @@ import {
   CreateMaintenanceRequestDto,
   UpdateMaintenanceRequestDto,
 } from './dto';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 @Injectable()
 export class MaintenanceRequestsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLogsService: ActivityLogsService,
+  ) {}
 
   async create(
     buildingId: string,
@@ -69,6 +73,24 @@ export class MaintenanceRequestsService {
         unit: { select: { id: true, unitNumber: true, floor: true } },
       },
     });
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'maintenance_request',
+      entityId: request.id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        title: request.title,
+        priority: request.priority,
+        tenantId: request.tenantId,
+      } as Prisma.InputJsonValue,
+    });
+
+    return request;
 
     return request;
   }
@@ -144,7 +166,8 @@ export class MaintenanceRequestsService {
   async update(
     id: string,
     buildingId: string,
-    userName: string,
+    userId: string,
+    userRole: string,
     dto: UpdateMaintenanceRequestDto,
   ) {
     const request = await this.prisma.maintenanceRequest.findFirst({
@@ -155,6 +178,7 @@ export class MaintenanceRequestsService {
       throw new NotFoundException('Maintenance request not found');
     }
 
+    const userName = await this.getUserName(userId, userRole);
     const dataToUpdate: Prisma.MaintenanceRequestUpdateInput = {};
 
     if (dto.status) {
@@ -203,6 +227,34 @@ export class MaintenanceRequestsService {
       },
     });
 
+    if (dto.status) {
+      await this.activityLogsService.create({
+        action: 'status_change',
+        entityType: 'maintenance_request',
+        entityId: updated.id,
+        userId,
+        userName,
+        userRole,
+        buildingId,
+        details: { status: dto.status } as Prisma.InputJsonValue,
+      });
+    }
+
     return updated;
+  }
+
+  private async getUserName(userId: string, userRole: string): Promise<string> {
+    if (userRole === 'manager') {
+      const manager = await this.prisma.manager.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      return manager?.name || 'Unknown';
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return user?.name || 'Unknown';
   }
 }

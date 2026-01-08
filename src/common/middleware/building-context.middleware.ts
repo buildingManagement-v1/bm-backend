@@ -21,7 +21,6 @@ export class BuildingContextMiddleware implements NestMiddleware {
     // Attach buildingId to request
     // Access validation will be done in the guard
     req.buildingId = buildingId;
-    console.log('Middleware - req.buildingId set:', req.buildingId); // ADD THIS
     next();
   }
 }

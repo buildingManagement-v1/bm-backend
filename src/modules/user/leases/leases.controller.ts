@@ -16,6 +16,7 @@ import { ManagerRolesGuard } from '../../../common/guards/manager-roles.guard';
 import { RequireManagerRoles } from '../../../common/decorators/require-manager-roles.decorator';
 import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
+import { User } from 'src/common/decorators/user.decorator';
 
 @Controller('v1/app/leases')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
@@ -25,8 +26,17 @@ export class LeasesController {
   @Post()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
-  async create(@BuildingId() buildingId: string, @Body() dto: CreateLeaseDto) {
-    const result = await this.leasesService.create(buildingId, dto);
+  async create(
+    @BuildingId() buildingId: string,
+    @Body() dto: CreateLeaseDto,
+    @User() user: { id: string; role: string },
+  ) {
+    const result = await this.leasesService.create(
+      buildingId,
+      dto,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,
@@ -63,8 +73,15 @@ export class LeasesController {
     @BuildingId() buildingId: string,
     @Param('id') id: string,
     @Body() dto: UpdateLeaseDto,
+    @User() user: { id: string; role: string },
   ) {
-    const result = await this.leasesService.update(id, buildingId, dto);
+    const result = await this.leasesService.update(
+      id,
+      buildingId,
+      dto,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,
@@ -75,8 +92,17 @@ export class LeasesController {
   @Delete(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
-  async remove(@BuildingId() buildingId: string, @Param('id') id: string) {
-    const result = await this.leasesService.remove(id, buildingId);
+  async remove(
+    @BuildingId() buildingId: string,
+    @Param('id') id: string,
+    @User() user: { id: string; role: string },
+  ) {
+    const result = await this.leasesService.remove(
+      id,
+      buildingId,
+      user.id,
+      user.role,
+    );
     return {
       success: true,
       data: result,

@@ -18,6 +18,7 @@ import { LeasesModule } from './modules/user/leases/leases.module';
 import { InvoicesModule } from './modules/user/invoices/invoices.module';
 import { ReportsModule } from './modules/user/reports/reports.module';
 import { DashboardModule } from './modules/user/dashboard/dashboard.module';
+import { ActivityLogsModule } from './modules/user/activity-logs/activity-logs.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { DashboardModule } from './modules/user/dashboard/dashboard.module';
     InvoicesModule,
     ReportsModule,
     DashboardModule,
+    ActivityLogsModule,
   ],
 })
 export class AppModule implements NestModule {
@@ -54,6 +56,7 @@ export class AppModule implements NestModule {
         'v1/app/leases',
         'v1/app/reports',
         'v1/app/dashboard',
+        'v1/app/activity-logs',
       );
   }
 }
