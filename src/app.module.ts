@@ -19,6 +19,9 @@ import { InvoicesModule } from './modules/user/invoices/invoices.module';
 import { ReportsModule } from './modules/user/reports/reports.module';
 import { DashboardModule } from './modules/user/dashboard/dashboard.module';
 import { ActivityLogsModule } from './modules/user/activity-logs/activity-logs.module';
+import { UsersModule } from './modules/platform-admin/users/users.module';
+import { SubscriptionsModule } from './modules/user/subscriptions/subscriptions.module';
+import { UserSubscriptionsModule } from './modules/user/user-subscriptions/user-subscriptions.module';
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { ActivityLogsModule } from './modules/user/activity-logs/activity-logs.m
     ReportsModule,
     DashboardModule,
     ActivityLogsModule,
+    UsersModule,
+    SubscriptionsModule,
+    UserSubscriptionsModule,
   ],
 })
 export class AppModule implements NestModule {

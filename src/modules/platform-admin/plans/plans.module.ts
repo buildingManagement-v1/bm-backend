@@ -7,5 +7,6 @@ import { ActivityLogsModule } from 'src/modules/user/activity-logs/activity-logs
   imports: [ActivityLogsModule],
   providers: [PlansService],
   controllers: [PlansController],
+  exports: [PlansService],
 })
 export class PlansModule {}

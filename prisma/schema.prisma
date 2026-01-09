@@ -130,6 +130,10 @@ model SubscriptionPlan {
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
+  subscriptions       Subscription[]
+  historyAsOldPlan    SubscriptionHistory[] @relation("OldPlan")
+  historyAsNewPlan    SubscriptionHistory[] @relation("NewPlan")
+
   @@map("subscription_plans")
 }
 
@@ -509,4 +513,65 @@ model PlatformActivityLog {
 
   @@index([createdAt])
   @@map("platform_activity_logs")
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  expired
+}
+
+enum SubscriptionAction {
+  created
+  upgraded
+  downgraded
+  renewed
+  cancelled
+}
+
+model Subscription {
+  id                  String              @id @default(uuid())
+  userId              String              @map("user_id")
+  planId              String              @map("plan_id")
+  buildingCount       Int                 @map("building_count")
+  managerCount        Int                 @map("manager_count")
+  totalAmount         Decimal             @map("total_amount")
+  billingCycleStart   DateTime            @map("billing_cycle_start")
+  billingCycleEnd     DateTime            @map("billing_cycle_end")
+  nextBillingDate     DateTime            @map("next_billing_date")
+  status              SubscriptionStatus  @default(active)
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  plan                SubscriptionPlan    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  history             SubscriptionHistory[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SubscriptionHistory {
+  id                  String              @id @default(uuid())
+  userId              String              @map("user_id")
+  subscriptionId      String              @map("subscription_id")
+  action              SubscriptionAction
+  oldPlanId           String?             @map("old_plan_id")
+  newPlanId           String              @map("new_plan_id")
+  oldBuildingCount    Int?                @map("old_building_count")
+  newBuildingCount    Int                 @map("new_building_count")
+  oldManagerCount     Int?                @map("old_manager_count")
+  newManagerCount     Int                 @map("new_manager_count")
+  proratedAmount      Decimal?            @map("prorated_amount")
+  notes               String?
+  createdAt           DateTime            @default(now()) @map("created_at")
+
+  subscription        Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  oldPlan             SubscriptionPlan?   @relation("OldPlan", fields: [oldPlanId], references: [id], onDelete: SetNull)
+  newPlan             SubscriptionPlan    @relation("NewPlan", fields: [newPlanId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@map("subscription_history")
 }
