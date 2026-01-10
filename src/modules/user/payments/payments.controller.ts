@@ -8,9 +8,10 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
 import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/payments')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 

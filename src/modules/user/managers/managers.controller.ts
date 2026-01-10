@@ -13,9 +13,10 @@ import { CreateManagerDto, UpdateManagerDto } from './dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { OwnerOnlyGuard } from 'src/common/guards/owner-only.guard';
 import { User } from 'src/common/decorators/user.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/managers')
-@UseGuards(JwtAuthGuard, OwnerOnlyGuard)
+@UseGuards(JwtAuthGuard, OwnerOnlyGuard, SubscriptionGuard)
 export class ManagersController {
   constructor(private readonly managersService: ManagersService) {}
 

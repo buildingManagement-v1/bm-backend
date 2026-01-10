@@ -18,9 +18,10 @@ import { User } from 'src/common/decorators/user.decorator';
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
 import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
 import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/tenants')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 

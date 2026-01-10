@@ -18,6 +18,7 @@ import { RequireManagerRoles } from '../../../common/decorators/require-manager-
 import { User } from '../../../common/decorators/user.decorator';
 import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/units')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
@@ -67,7 +68,7 @@ export class UnitsController {
   }
 
   @Patch(':id')
-  @UseGuards(ManagerRolesGuard)
+  @UseGuards(ManagerRolesGuard, SubscriptionGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
   async update(
     @BuildingId() buildingId: string,

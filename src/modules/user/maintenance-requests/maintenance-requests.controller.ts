@@ -19,9 +19,10 @@ import { RequireManagerRoles } from '../../../common/decorators/require-manager-
 import { User } from '../../../common/decorators/user.decorator';
 import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/maintenance-requests')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class MaintenanceRequestsController {
   constructor(
     private readonly maintenanceRequestsService: MaintenanceRequestsService,

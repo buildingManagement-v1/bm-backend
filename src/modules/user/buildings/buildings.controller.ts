@@ -13,9 +13,10 @@ import { CreateBuildingDto, UpdateBuildingDto } from './dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { OwnerOnlyGuard } from 'src/common/guards/owner-only.guard';
 import { User } from 'src/common/decorators/user.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/buildings')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 export class BuildingsController {
   constructor(private readonly buildingsService: BuildingsService) {}
 

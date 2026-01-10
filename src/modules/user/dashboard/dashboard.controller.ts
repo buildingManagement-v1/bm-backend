@@ -3,9 +3,10 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { BuildingAccessGuard } from '../../../common/guards/building-access.guard';
 import { BuildingId } from '../../../common/decorators/building-id.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/dashboard')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

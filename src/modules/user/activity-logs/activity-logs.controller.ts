@@ -10,9 +10,10 @@ import {
   ActivityAction,
   ActivityEntityType,
 } from 'generated/prisma/client';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/activity-logs')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
 

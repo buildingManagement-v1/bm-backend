@@ -29,7 +29,7 @@ export class MaintenanceRequestsService {
     let unitId: string | undefined;
 
     // Managers and Owners must select a tenant
-    if (!userRole || userRole === 'manager') {
+    if (userRole === 'owner' || userRole === 'manager') {
       if (!dto.tenantId) {
         throw new BadRequestException('Please select a tenant');
       }
@@ -45,6 +45,8 @@ export class MaintenanceRequestsService {
       tenantId = dto.tenantId;
       unitId = tenant.unitId || undefined;
     } else {
+      console.log('===============');
+      console.log(userRole);
       // User IS a tenant - use their ID
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: userId, buildingId },
@@ -98,7 +100,8 @@ export class MaintenanceRequestsService {
   async findAll(buildingId: string, userId: string, userRole?: string) {
     const whereClause: Prisma.MaintenanceRequestWhereInput = {
       buildingId,
-      ...(userRole !== 'manager' && { tenantId: userId }),
+      ...(userRole !== 'manager' &&
+        userRole !== 'owner' && { tenantId: userId }),
     };
 
     const requests = await this.prisma.maintenanceRequest.findMany({
@@ -156,7 +159,11 @@ export class MaintenanceRequestsService {
     }
 
     // Tenants can only view their own requests
-    if (userRole !== 'manager' && request.tenantId !== userId) {
+    if (
+      userRole !== 'manager' &&
+      userRole !== 'owner' &&
+      request.tenantId !== userId
+    ) {
       throw new ForbiddenException('You can only view your own requests');
     }
 

@@ -6,6 +6,7 @@ import { BuildingAccessGuard } from 'src/common/guards/building-access.guard';
 import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
 import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/reports')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
@@ -21,7 +22,7 @@ export class ReportsController {
   }
 
   @Get('revenue')
-  @UseGuards(ManagerRolesGuard)
+  @UseGuards(ManagerRolesGuard, SubscriptionGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
   async getRevenue(
     @BuildingId() buildingId: string,

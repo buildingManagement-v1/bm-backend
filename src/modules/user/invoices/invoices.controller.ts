@@ -6,9 +6,10 @@ import { ManagerRolesGuard } from '../../../common/guards/manager-roles.guard';
 import { RequireManagerRoles } from '../../../common/decorators/require-manager-roles.decorator';
 import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
+import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
 @Controller('v1/app/invoices')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
