@@ -7,12 +7,14 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateSubscriptionDto, UpdateSubscriptionDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/client';
+import { PdfService } from 'src/common/pdf/pdf.service';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private pdfService: PdfService,
   ) {}
 
   async create(dto: CreateSubscriptionDto, adminId: string, adminName: string) {
@@ -389,6 +391,33 @@ export class SubscriptionsService {
       },
       message: 'Subscription upgraded successfully',
     };
+  }
+
+  async downloadInvoice(id: string) {
+    const result = await this.findOne(id);
+    const subscription = result.data;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: subscription.userId },
+      select: { name: true, email: true },
+    });
+
+    return this.pdfService.generateSubscriptionInvoice({
+      invoiceNumber: `SUB-${subscription.id.substring(0, 8)}`,
+      date: subscription.createdAt,
+      userName: user?.name || 'User',
+      userEmail: user?.email || '',
+      planName: subscription.plan.name,
+      buildingCount: subscription.buildingCount,
+      managerCount: subscription.managerCount,
+      buildingPrice: Number(subscription.plan.buildingPrice),
+      managerPrice: Number(subscription.plan.managerPrice),
+      totalAmount: Number(subscription.totalAmount),
+      billingPeriod: {
+        start: subscription.billingCycleStart,
+        end: subscription.billingCycleEnd,
+      },
+    });
   }
 
   private calculateBilling(

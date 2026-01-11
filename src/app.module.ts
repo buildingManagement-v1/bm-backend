@@ -24,6 +24,7 @@ import { SubscriptionsModule } from './modules/user/subscriptions/subscriptions.
 import { UserSubscriptionsModule } from './modules/user/user-subscriptions/user-subscriptions.module';
 import { TenantAuthModule } from './modules/tenant/auth/auth.module';
 import { PortalModule } from './modules/tenant/portal/portal.module';
+import { PdfModule } from './common/pdf/pdf.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PortalModule } from './modules/tenant/portal/portal.module';
     UserSubscriptionsModule,
     TenantAuthModule,
     PortalModule,
+    PdfModule,
   ],
 })
 export class AppModule implements NestModule {

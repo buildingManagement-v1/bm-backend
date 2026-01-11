@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto, UpdateSubscriptionDto } from './dto';
@@ -14,6 +15,7 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { User } from '../../../common/decorators/user.decorator';
 import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto';
+import type { Response } from 'express';
 
 @Controller('v1/platform/subscriptions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -89,5 +91,18 @@ export class SubscriptionsController {
       dto.newBuildingCount,
       dto.newManagerCount,
     );
+  }
+
+  @Get(':id/download')
+  async downloadInvoice(@Param('id') id: string, @Res() res: Response) {
+    const pdfDoc = await this.subscriptionsService.downloadInvoice(id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=subscription-${id}.pdf`,
+    );
+
+    pdfDoc.pipe(res);
   }
 }
