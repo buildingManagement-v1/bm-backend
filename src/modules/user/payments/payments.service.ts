@@ -7,6 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { CreatePaymentDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { EmailService } from 'src/common/email/email.service';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -19,6 +20,7 @@ export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private emailService: EmailService,
   ) {}
 
   async create(
@@ -129,6 +131,14 @@ export class PaymentsService {
         invoiceNumber,
       } as Prisma.InputJsonValue,
     });
+
+    await this.emailService.sendPaymentReceiptEmail(
+      payment!.tenant.email,
+      payment!.tenant.name,
+      Number(payment!.amount),
+      payment!.paymentDate,
+      payment!.invoice?.invoiceNumber || '',
+    );
 
     return payment!;
   }

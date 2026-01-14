@@ -106,7 +106,7 @@ export class TenantAuthService {
       10,
     );
 
-    this.emailService.sendPasswordResetOTP(tenant.email, otp);
+    await this.emailService.sendTenantPasswordResetEmail(tenant.email, otp);
 
     return { message: 'If email exists, OTP has been sent' };
   }

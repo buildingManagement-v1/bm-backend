@@ -139,7 +139,7 @@ export class AuthService {
       10,
     );
 
-    this.emailService.sendPasswordResetOTP(manager.email, otp);
+    await this.emailService.sendManagerPasswordResetEmail(manager.email, otp);
 
     return { message: 'If email exists, OTP has been sent' };
   }

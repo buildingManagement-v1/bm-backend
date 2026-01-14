@@ -10,12 +10,14 @@ import * as bcrypt from 'bcrypt';
 import { UserStatus } from 'generated/prisma/enums';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
+import { EmailService } from 'src/common/email/email.service';
 
 @Injectable()
 export class ManagersService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private emailService: EmailService,
   ) {}
 
   async create(userId: string, dto: CreateManagerDto) {
@@ -95,6 +97,12 @@ export class ManagersService {
         } as Prisma.InputJsonValue,
       });
     }
+
+    await this.emailService.sendManagerCreatedEmail(
+      manager.email,
+      manager.name,
+      dto.password,
+    );
 
     return {
       id: manager.id,

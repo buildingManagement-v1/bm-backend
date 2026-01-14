@@ -7,6 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { CreateLeaseDto, UpdateLeaseDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { EmailService } from 'src/common/email/email.service';
 
 const leaseInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -18,6 +19,7 @@ export class LeasesService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private emailService: EmailService,
   ) {}
 
   async create(
@@ -118,7 +120,14 @@ export class LeasesService {
       } as Prisma.InputJsonValue,
     });
 
-    return lease;
+    await this.emailService.sendLeaseCreatedEmail(
+      lease.tenant.email,
+      lease.tenant.name,
+      lease.unit.unitNumber,
+      lease.startDate,
+      lease.endDate,
+      Number(lease.rentAmount),
+    );
 
     return lease;
   }

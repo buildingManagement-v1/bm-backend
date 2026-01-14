@@ -11,12 +11,14 @@ import {
   UpdateMaintenanceRequestDto,
 } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { EmailService } from 'src/common/email/email.service';
 
 @Injectable()
 export class MaintenanceRequestsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private emailService: EmailService,
   ) {}
 
   async create(
@@ -92,7 +94,28 @@ export class MaintenanceRequestsService {
       } as Prisma.InputJsonValue,
     });
 
-    return request;
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { userId: true },
+    });
+
+    if (building) {
+      const owner = await this.prisma.user.findUnique({
+        where: { id: building.userId },
+        select: { name: true, email: true },
+      });
+
+      if (owner) {
+        await this.emailService.sendMaintenanceRequestCreatedEmail(
+          owner.email,
+          owner.name,
+          request.tenant.name,
+          request.unit?.unitNumber || 'N/A',
+          request.title,
+          request.priority,
+        );
+      }
+    }
 
     return request;
   }

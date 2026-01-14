@@ -25,6 +25,9 @@ import { UserSubscriptionsModule } from './modules/user/user-subscriptions/user-
 import { TenantAuthModule } from './modules/tenant/auth/auth.module';
 import { PortalModule } from './modules/tenant/portal/portal.module';
 import { PdfModule } from './common/pdf/pdf.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { SchedulerModule } from './common/scheduler/scheduler.module';
+import { NotificationsModule } from './common/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -53,6 +56,9 @@ import { PdfModule } from './common/pdf/pdf.module';
     TenantAuthModule,
     PortalModule,
     PdfModule,
+    ScheduleModule.forRoot(),
+    SchedulerModule,
+    NotificationsModule,
   ],
 })
 export class AppModule implements NestModule {

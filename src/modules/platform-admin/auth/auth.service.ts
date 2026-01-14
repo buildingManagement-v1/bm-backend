@@ -100,6 +100,12 @@ export class AuthService {
       },
     });
 
+    await this.emailService.sendPlatformAdminCreatedEmail(
+      admin.email,
+      admin.name,
+      dto.password,
+    );
+
     return {
       id: admin.id,
       name: admin.name,
@@ -251,7 +257,10 @@ export class AuthService {
       10,
     );
 
-    this.emailService.sendPasswordResetOTP(admin.email, otp);
+    await this.emailService.sendPlatformAdminPasswordResetEmail(
+      admin.email,
+      otp,
+    );
 
     return { message: 'If email exists, OTP has been sent' };
   }

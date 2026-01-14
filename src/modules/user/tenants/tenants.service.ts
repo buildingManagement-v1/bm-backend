@@ -9,12 +9,14 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import * as bcrypt from 'bcrypt';
+import { EmailService } from 'src/common/email/email.service';
 
 @Injectable()
 export class TenantsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private emailService: EmailService,
   ) {}
 
   async create(
@@ -93,6 +95,17 @@ export class TenantsService {
         unitId: tenant.unitId,
       } as Prisma.InputJsonValue,
     });
+
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { name: true },
+    });
+
+    await this.emailService.sendTenantCreatedEmail(
+      tenant.email,
+      tenant.name,
+      building?.name || 'Your Building',
+    );
 
     return {
       id: tenant.id,

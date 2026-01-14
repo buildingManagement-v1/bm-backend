@@ -46,6 +46,8 @@ export class AuthService {
       },
     });
 
+    await this.emailService.sendUserRegistrationEmail(user.email, user.name);
+
     return {
       id: user.id,
       name: user.name,
@@ -117,7 +119,7 @@ export class AuthService {
       10,
     );
 
-    this.emailService.sendPasswordResetOTP(user.email, otp);
+    await this.emailService.sendUserPasswordResetEmail(user.email, otp);
 
     return { message: 'If email exists, OTP has been sent' };
   }

@@ -8,6 +8,7 @@ import { CreateSubscriptionDto, UpdateSubscriptionDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/client';
 import { PdfService } from 'src/common/pdf/pdf.service';
+import { EmailService } from 'src/common/email/email.service';
 
 @Injectable()
 export class SubscriptionsService {
@@ -15,6 +16,7 @@ export class SubscriptionsService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private pdfService: PdfService,
+    private emailService: EmailService,
   ) {}
 
   async create(dto: CreateSubscriptionDto, adminId: string, adminName: string) {
@@ -95,6 +97,20 @@ export class SubscriptionsService {
         totalAmount: Number(totalAmount),
       } as Prisma.InputJsonValue,
     });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+      select: { name: true, email: true },
+    });
+
+    if (user) {
+      await this.emailService.sendSubscriptionCreatedEmail(
+        user.email,
+        user.name,
+        plan.name,
+        Number(totalAmount),
+      );
+    }
 
     return {
       success: true,

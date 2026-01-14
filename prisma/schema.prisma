@@ -575,3 +575,39 @@ model SubscriptionHistory {
   @@index([subscriptionId])
   @@map("subscription_history")
 }
+
+enum NotificationType {
+  user_registration
+  manager_created
+  tenant_created
+  payment_received
+  invoice_created
+  invoice_overdue
+  maintenance_request_created
+  maintenance_request_updated
+  lease_created
+  lease_expiring
+  lease_expired
+  subscription_created
+  subscription_upgraded
+  subscription_expiring
+  subscription_expired
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  userType  UserType         @map("user_type")
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false) @map("is_read")
+  link      String?
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@index([userId, userType])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
