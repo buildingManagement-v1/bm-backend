@@ -1,10 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SubmitMaintenanceRequestDto } from './dto';
+import { NotificationsService } from 'src/common/notifications/notifications.service';
+import { EmailService } from 'src/common/email/email.service';
 
 @Injectable()
 export class PortalService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async getProfile(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -148,6 +154,43 @@ export class PortalService {
         },
       },
     });
+
+    const tenantData = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+
+    const building = await this.prisma.building.findUnique({
+      where: { id: tenant.buildingId },
+      select: { userId: true },
+    });
+
+    if (building && tenantData) {
+      const owner = await this.prisma.user.findUnique({
+        where: { id: building.userId },
+        select: { name: true, email: true },
+      });
+
+      if (owner) {
+        await this.emailService.sendMaintenanceRequestCreatedEmail(
+          owner.email,
+          owner.name,
+          tenantData.name,
+          request.unit?.unitNumber || 'N/A',
+          request.title,
+          request.priority,
+        );
+
+        await this.notificationsService.create({
+          userId: building.userId,
+          userType: 'user',
+          type: 'maintenance_request_created',
+          title: 'New Maintenance Request',
+          message: `${tenantData.name} submitted: ${request.title}`,
+          link: `/dashboard/maintenance?building=${tenant.buildingId}`,
+        });
+      }
+    }
 
     return {
       success: true,

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SchedulerService {
@@ -10,6 +11,7 @@ export class SchedulerService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // ========== SUBSCRIPTIONS ==========
@@ -54,6 +56,14 @@ export class SchedulerService {
           subscription.plan.name,
           subscription.billingCycleEnd,
         );
+        await this.notificationsService.create({
+          userId: subscription.userId,
+          userType: 'user',
+          type: 'subscription_expiring',
+          title: 'Subscription Expiring Soon',
+          message: `Your ${subscription.plan.name} subscription will expire on ${subscription.billingCycleEnd.toLocaleDateString()}`,
+          link: '/dashboard/subscriptions',
+        });
         this.logger.log(`Sent expiring email to ${user.email}`);
       } catch (error) {
         this.logger.error(`Failed to send expiring email`, error);
@@ -104,6 +114,15 @@ export class SchedulerService {
           user.name,
           subscription.plan.name,
         );
+
+        await this.notificationsService.create({
+          userId: subscription.userId,
+          userType: 'user',
+          type: 'subscription_expired',
+          title: 'Subscription Expired',
+          message: `Your ${subscription.plan.name} subscription has expired`,
+          link: '/dashboard/subscriptions',
+        });
 
         this.logger.log(`Expired and notified ${user.email}`);
       } catch (error) {
@@ -228,7 +247,7 @@ export class SchedulerService {
         dueDate: true,
         status: true,
         tenant: {
-          select: { name: true, email: true },
+          select: { id: true, name: true, email: true },
         },
       },
     });
@@ -249,6 +268,16 @@ export class SchedulerService {
           Number(invoice.amount),
           invoice.dueDate,
         );
+
+        await this.notificationsService.create({
+          userId: invoice.tenant.id,
+          userType: 'tenant',
+          type: 'invoice_overdue',
+          title: 'Payment Overdue',
+          message: `Your payment of $${Number(invoice.amount).toFixed(2)} is overdue. Invoice: ${invoice.invoiceNumber}`,
+          link: '/tenant/payments',
+        });
+
         this.logger.log(
           `Sent overdue payment email to ${invoice.tenant.email}`,
         );
@@ -283,7 +312,7 @@ export class SchedulerService {
         amount: true,
         dueDate: true,
         tenant: {
-          select: { name: true, email: true },
+          select: { id: true, name: true, email: true },
         },
       },
     });
@@ -297,6 +326,15 @@ export class SchedulerService {
           Number(invoice.amount),
           invoice.dueDate,
         );
+
+        await this.notificationsService.create({
+          userId: invoice.tenant.id,
+          userType: 'tenant',
+          type: 'invoice_created',
+          title: 'Payment Reminder',
+          message: `Payment of $${Number(invoice.amount).toFixed(2)} is due soon. Invoice: ${invoice.invoiceNumber}`,
+          link: '/tenant/payments',
+        });
         this.logger.log(`Sent payment reminder to ${invoice.tenant.email}`);
       } catch (error) {
         this.logger.error(`Failed to send payment reminder`, error);

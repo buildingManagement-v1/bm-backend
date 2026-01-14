@@ -12,6 +12,7 @@ import {
 } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
+import { NotificationsService } from 'src/common/notifications/notifications.service';
 
 @Injectable()
 export class MaintenanceRequestsService {
@@ -19,6 +20,7 @@ export class MaintenanceRequestsService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -47,8 +49,6 @@ export class MaintenanceRequestsService {
       tenantId = dto.tenantId;
       unitId = tenant.unitId || undefined;
     } else {
-      console.log('===============');
-      console.log(userRole);
       // User IS a tenant - use their ID
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: userId, buildingId },
@@ -94,8 +94,21 @@ export class MaintenanceRequestsService {
       } as Prisma.InputJsonValue,
     });
 
+    const tenantData = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, buildingId: true },
+    });
+
+    if (!tenantData) {
+      return {
+        success: true,
+        data: request,
+        message: 'Maintenance request submitted successfully',
+      };
+    }
+
     const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
+      where: { id: tenantData.buildingId },
       select: { userId: true },
     });
 
@@ -109,11 +122,20 @@ export class MaintenanceRequestsService {
         await this.emailService.sendMaintenanceRequestCreatedEmail(
           owner.email,
           owner.name,
-          request.tenant.name,
+          tenantData.name,
           request.unit?.unitNumber || 'N/A',
           request.title,
           request.priority,
         );
+
+        await this.notificationsService.create({
+          userId: building.userId,
+          userType: 'user',
+          type: 'maintenance_request_created',
+          title: 'New Maintenance Request',
+          message: `${tenantData.name} submitted a maintenance request: ${request.title}`,
+          link: `/dashboard/maintenance?building=${tenantData.buildingId}`,
+        });
       }
     }
 
@@ -270,7 +292,85 @@ export class MaintenanceRequestsService {
       });
     }
 
+    if (
+      dto.status &&
+      (dto.status === 'in_progress' || dto.status === 'completed')
+    ) {
+      await this.emailService.sendMaintenanceStatusUpdateEmail(
+        updated.tenant.email,
+        updated.tenant.name,
+        updated.title,
+        dto.status,
+      );
+
+      await this.notificationsService.create({
+        userId: updated.tenantId,
+        userType: 'tenant',
+        type: 'maintenance_request_updated',
+        title: 'Maintenance Request Updated',
+        message: `Your maintenance request "${updated.title}" is now ${dto.status.replace('_', ' ')}`,
+        link: `/tenant/maintenance`,
+      });
+    }
+
     return updated;
+  }
+
+  async remove(
+    id: string,
+    buildingId: string,
+    userId: string,
+    userRole: string,
+  ) {
+    const request = await this.prisma.maintenanceRequest.findFirst({
+      where: { id, buildingId },
+      include: {
+        tenant: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Maintenance request not found');
+    }
+
+    await this.prisma.maintenanceRequest.delete({
+      where: { id },
+    });
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'delete',
+      entityType: 'maintenance_request',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        title: request.title,
+        tenantId: request.tenantId,
+      } as Prisma.InputJsonValue,
+    });
+
+    await this.emailService.sendMaintenanceStatusUpdateEmail(
+      request.tenant.email,
+      request.tenant.name,
+      request.title,
+      'cancelled',
+    );
+
+    await this.notificationsService.create({
+      userId: request.tenantId,
+      userType: 'tenant',
+      type: 'maintenance_request_updated',
+      title: 'Maintenance Request Cancelled',
+      message: `Your maintenance request "${request.title}" has been cancelled`,
+      link: `/tenant/maintenance`,
+    });
+
+    return { success: true };
   }
 
   private async getUserName(userId: string, userRole: string): Promise<string> {

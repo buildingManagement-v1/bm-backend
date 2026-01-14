@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 import { MaintenanceRequestsService } from './maintenance-requests.service';
 import {
@@ -101,6 +102,26 @@ export class MaintenanceRequestsController {
       success: true,
       data: result,
       message: 'Maintenance request updated successfully',
+    };
+  }
+
+  @Delete(':id')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.maintenance_manager)
+  async remove(
+    @User() user: { id: string; role: string },
+    @BuildingId() buildingId: string,
+    @Param('id') id: string,
+  ) {
+    await this.maintenanceRequestsService.remove(
+      id,
+      buildingId,
+      user.id,
+      user.role,
+    );
+    return {
+      success: true,
+      message: 'Maintenance request deleted successfully',
     };
   }
 }
