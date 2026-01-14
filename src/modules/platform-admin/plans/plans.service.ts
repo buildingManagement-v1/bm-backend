@@ -56,6 +56,14 @@ export class PlansService {
     return plans;
   }
 
+  async findAllActive() {
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { status: 'active' },
+      orderBy: { buildingPrice: 'asc' },
+    });
+    return plans;
+  }
+
   async findOne(id: string) {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { id },

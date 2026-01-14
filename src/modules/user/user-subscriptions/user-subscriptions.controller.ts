@@ -99,4 +99,49 @@ export class UserSubscriptionsController {
 
     return result;
   }
+
+  @Post('subscribe-free')
+  async subscribeFree(@User() user: { id: string; email: string }) {
+    const subscriptions = await this.subscriptionsService.findAll(user.id);
+    const activeSubscription = subscriptions.data.find(
+      (sub) => sub.status === 'active',
+    );
+
+    if (activeSubscription) {
+      return {
+        success: false,
+        message: 'You already have an active subscription',
+      };
+    }
+
+    // Find Free plan
+    const plans = await this.plansService.findAllActive();
+    const freePlan = plans.find((plan) => plan.name === 'Free');
+
+    if (!freePlan) {
+      return {
+        success: false,
+        message: 'Free plan not available',
+      };
+    }
+
+    // Create subscription
+    const result = await this.subscriptionsService.create(
+      {
+        userId: user.id,
+        planId: freePlan.id,
+        buildingCount: 1,
+        managerCount: 1,
+        billingCycleStart: new Date().toISOString(),
+      },
+      user.id,
+      user.email,
+    );
+
+    return {
+      success: true,
+      data: result,
+      message: 'Successfully subscribed to Free plan',
+    };
+  }
 }

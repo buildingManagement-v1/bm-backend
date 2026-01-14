@@ -16,11 +16,20 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 
 @Controller('v1/platform/plans')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
+  @Get('public')
+  async findAllActive() {
+    const result = await this.plansService.findAllActive();
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   async create(
     @Body() dto: CreatePlanDto,
@@ -35,6 +44,7 @@ export class PlansController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     'super_admin',
     'user_manager',
@@ -51,6 +61,7 @@ export class PlansController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     'super_admin',
     'user_manager',
@@ -67,6 +78,7 @@ export class PlansController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   async update(
     @Param('id') id: string,
@@ -87,6 +99,7 @@ export class PlansController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   async remove(
     @Param('id') id: string,
