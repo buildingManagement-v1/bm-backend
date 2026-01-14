@@ -1,4 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { ManagerRole } from 'generated/prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -8,6 +15,8 @@ import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Reports')
+@ApiBearerAuth()
 @Controller('v1/app/reports')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
 export class ReportsController {
@@ -16,6 +25,8 @@ export class ReportsController {
   @Get('occupancy')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Get occupancy report' })
+  @ApiResponse({ status: 200, description: 'Return occupancy report' })
   async getOccupancy(@BuildingId() buildingId: string) {
     const result = await this.reportsService.getOccupancy(buildingId);
     return { success: true, data: result };
@@ -24,6 +35,10 @@ export class ReportsController {
   @Get('revenue')
   @UseGuards(ManagerRolesGuard, SubscriptionGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Get revenue report' })
+  @ApiResponse({ status: 200, description: 'Return revenue report' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
   async getRevenue(
     @BuildingId() buildingId: string,
     @Query('startDate') startDate?: string,
@@ -40,6 +55,8 @@ export class ReportsController {
   @Get('tenants')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Get tenants report' })
+  @ApiResponse({ status: 200, description: 'Return tenants report' })
   async getTenants(@BuildingId() buildingId: string) {
     const result = await this.reportsService.getTenants(buildingId);
     return { success: true, data: result };

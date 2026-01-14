@@ -8,6 +8,12 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -20,6 +26,8 @@ import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
 import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Tenants')
+@ApiBearerAuth()
 @Controller('v1/app/tenants')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class TenantsController {
@@ -28,6 +36,8 @@ export class TenantsController {
   @Post()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Create a tenant' })
+  @ApiResponse({ status: 201, description: 'Tenant created successfully' })
   async create(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
@@ -49,6 +59,8 @@ export class TenantsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get all tenants' })
+  @ApiResponse({ status: 200, description: 'Return all tenants' })
   async findAll(
     @User() user: { id: string },
     @BuildingId() buildingId: string,
@@ -63,6 +75,8 @@ export class TenantsController {
   @Get(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get a tenant by ID' })
+  @ApiResponse({ status: 200, description: 'Return tenant details' })
   async findOne(
     @User() user: { id: string },
     @BuildingId() buildingId: string,
@@ -78,6 +92,8 @@ export class TenantsController {
   @Patch(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Update a tenant' })
+  @ApiResponse({ status: 200, description: 'Tenant updated successfully' })
   async update(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
@@ -101,6 +117,8 @@ export class TenantsController {
   @Delete(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Delete a tenant' })
+  @ApiResponse({ status: 200, description: 'Tenant deleted successfully' })
   async remove(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,

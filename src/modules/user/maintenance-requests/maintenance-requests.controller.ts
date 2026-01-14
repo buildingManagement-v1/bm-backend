@@ -8,6 +8,12 @@ import {
   UseGuards,
   Delete,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { MaintenanceRequestsService } from './maintenance-requests.service';
 import {
   CreateMaintenanceRequestDto,
@@ -22,6 +28,8 @@ import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Maintenance Requests')
+@ApiBearerAuth()
 @Controller('v1/app/maintenance-requests')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class MaintenanceRequestsController {
@@ -30,6 +38,11 @@ export class MaintenanceRequestsController {
   ) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create maintenance request' })
+  @ApiResponse({
+    status: 201,
+    description: 'Maintenance request created successfully',
+  })
   async create(
     @User() user: { id: string; role?: string },
     @BuildingId() buildingId: string,
@@ -49,6 +62,8 @@ export class MaintenanceRequestsController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get all maintenance requests' })
+  @ApiResponse({ status: 200, description: 'Return all maintenance requests' })
   async findAll(
     @User() user: { id: string; role?: string },
     @BuildingId() buildingId: string,
@@ -65,6 +80,11 @@ export class MaintenanceRequestsController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get maintenance request by ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return maintenance request details',
+  })
   async findOne(
     @User() user: { id: string; role?: string },
     @BuildingId() buildingId: string,
@@ -85,6 +105,11 @@ export class MaintenanceRequestsController {
   @Patch(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.maintenance_manager)
+  @ApiOperation({ summary: 'Update maintenance request' })
+  @ApiResponse({
+    status: 200,
+    description: 'Maintenance request updated successfully',
+  })
   async update(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
@@ -108,6 +133,11 @@ export class MaintenanceRequestsController {
   @Delete(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.maintenance_manager)
+  @ApiOperation({ summary: 'Delete maintenance request' })
+  @ApiResponse({
+    status: 200,
+    description: 'Maintenance request deleted successfully',
+  })
   async remove(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,

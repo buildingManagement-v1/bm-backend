@@ -8,6 +8,12 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { LeasesService } from './leases.service';
 import { CreateLeaseDto, UpdateLeaseDto } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -19,6 +25,8 @@ import { ManagerRole } from 'generated/prisma/client';
 import { User } from 'src/common/decorators/user.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Leases')
+@ApiBearerAuth()
 @Controller('v1/app/leases')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class LeasesController {
@@ -27,6 +35,8 @@ export class LeasesController {
   @Post()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Create lease' })
+  @ApiResponse({ status: 201, description: 'Lease created successfully' })
   async create(
     @BuildingId() buildingId: string,
     @Body() dto: CreateLeaseDto,
@@ -48,6 +58,8 @@ export class LeasesController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get all leases' })
+  @ApiResponse({ status: 200, description: 'Return all leases' })
   async findAll(@BuildingId() buildingId: string) {
     const result = await this.leasesService.findAll(buildingId);
     return {
@@ -59,6 +71,8 @@ export class LeasesController {
   @Get(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get lease by ID' })
+  @ApiResponse({ status: 200, description: 'Return lease details' })
   async findOne(@BuildingId() buildingId: string, @Param('id') id: string) {
     const result = await this.leasesService.findOne(id, buildingId);
     return {
@@ -70,6 +84,8 @@ export class LeasesController {
   @Patch(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Update lease' })
+  @ApiResponse({ status: 200, description: 'Lease updated successfully' })
   async update(
     @BuildingId() buildingId: string,
     @Param('id') id: string,
@@ -93,6 +109,8 @@ export class LeasesController {
   @Delete(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Delete lease' })
+  @ApiResponse({ status: 200, description: 'Lease deleted successfully' })
   async remove(
     @BuildingId() buildingId: string,
     @Param('id') id: string,

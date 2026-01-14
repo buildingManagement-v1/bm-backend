@@ -1,10 +1,18 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { User } from '../../../common/decorators/user.decorator';
 import { PlansService } from '../../platform-admin/plans/plans.service';
 import { ChangePlanDto } from './dto/change-plan.dto';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
+@ApiTags('User Subscriptions')
+@ApiBearerAuth()
 @Controller('v1/app/subscriptions')
 @UseGuards(JwtAuthGuard)
 export class UserSubscriptionsController {
@@ -14,6 +22,8 @@ export class UserSubscriptionsController {
   ) {}
 
   @Get('my-subscription')
+  @ApiOperation({ summary: 'Get current user active subscription' })
+  @ApiResponse({ status: 200, description: 'Return user active subscription' })
   async getMySubscription(@User() user: { id: string; email: string }) {
     const result = await this.subscriptionsService.findAll(user.id);
 
@@ -29,6 +39,8 @@ export class UserSubscriptionsController {
   }
 
   @Get('available-plans')
+  @ApiOperation({ summary: 'Get available subscription plans' })
+  @ApiResponse({ status: 200, description: 'Return active plans' })
   async getAvailablePlans() {
     const plans = await this.plansService.findAll();
 
@@ -41,6 +53,8 @@ export class UserSubscriptionsController {
   }
 
   @Post('calculate-change')
+  @ApiOperation({ summary: 'Calculate prorating for plan change' })
+  @ApiResponse({ status: 200, description: 'Return prorated calculation' })
   async calculatePlanChange(
     @Body() dto: ChangePlanDto,
     @User() user: { id: string; email: string },
@@ -70,6 +84,8 @@ export class UserSubscriptionsController {
   }
 
   @Post('change-plan')
+  @ApiOperation({ summary: 'Change current subscription plan' })
+  @ApiResponse({ status: 200, description: 'Plan changed successfully' })
   async changePlan(
     @Body() dto: ChangePlanDto,
     @User() user: { id: string; email: string },
@@ -101,6 +117,11 @@ export class UserSubscriptionsController {
   }
 
   @Post('subscribe-free')
+  @ApiOperation({ summary: 'Subscribe to the free plan' })
+  @ApiResponse({
+    status: 201,
+    description: 'Successfully subscribed to Free plan',
+  })
   async subscribeFree(@User() user: { id: string; email: string }) {
     const subscriptions = await this.subscriptionsService.findAll(user.id);
     const activeSubscription = subscriptions.data.find(

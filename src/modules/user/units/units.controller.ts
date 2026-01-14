@@ -8,6 +8,12 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { UnitsService } from './units.service';
 import { CreateUnitDto, UpdateUnitDto } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -20,6 +26,8 @@ import { BuildingId } from '../../../common/decorators/building-id.decorator';
 import { ManagerRole } from 'generated/prisma/client';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Units')
+@ApiBearerAuth()
 @Controller('v1/app/units')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard)
 export class UnitsController {
@@ -27,6 +35,8 @@ export class UnitsController {
 
   @Post()
   @UseGuards(OwnerOnlyGuard)
+  @ApiOperation({ summary: 'Create a unit' })
+  @ApiResponse({ status: 201, description: 'Unit created successfully' })
   async create(
     @User() user: { id: string; role: string },
     @BuildingId() buildingId: string,
@@ -48,6 +58,8 @@ export class UnitsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get all units' })
+  @ApiResponse({ status: 200, description: 'Return all units' })
   async findAll(@BuildingId() buildingId: string) {
     const result = await this.unitsService.findAll(buildingId);
     return {
@@ -59,6 +71,8 @@ export class UnitsController {
   @Get(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get a unit by ID' })
+  @ApiResponse({ status: 200, description: 'Return unit details' })
   async findOne(@BuildingId() buildingId: string, @Param('id') id: string) {
     const result = await this.unitsService.findOne(buildingId, id);
     return {
@@ -70,6 +84,8 @@ export class UnitsController {
   @Patch(':id')
   @UseGuards(ManagerRolesGuard, SubscriptionGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Update a unit' })
+  @ApiResponse({ status: 200, description: 'Unit updated successfully' })
   async update(
     @BuildingId() buildingId: string,
     @User() user: { id: string; role: string },
@@ -92,6 +108,8 @@ export class UnitsController {
 
   @Delete(':id')
   @UseGuards(OwnerOnlyGuard)
+  @ApiOperation({ summary: 'Delete a unit' })
+  @ApiResponse({ status: 200, description: 'Unit deleted successfully' })
   async remove(
     @BuildingId() buildingId: string,
     @Param('id') id: string,

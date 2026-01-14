@@ -8,6 +8,12 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { ManagersService } from './managers.service';
 import { CreateManagerDto, UpdateManagerDto } from './dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -15,12 +21,16 @@ import { OwnerOnlyGuard } from 'src/common/guards/owner-only.guard';
 import { User } from 'src/common/decorators/user.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Managers')
+@ApiBearerAuth()
 @Controller('v1/app/managers')
 @UseGuards(JwtAuthGuard, OwnerOnlyGuard, SubscriptionGuard)
 export class ManagersController {
   constructor(private readonly managersService: ManagersService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create a manager' })
+  @ApiResponse({ status: 201, description: 'Manager created successfully' })
   async create(@User() user: { id: string }, @Body() dto: CreateManagerDto) {
     const result = await this.managersService.create(user.id, dto);
     return {
@@ -31,6 +41,8 @@ export class ManagersController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get all managers' })
+  @ApiResponse({ status: 200, description: 'Return all managers' })
   async findAll(@User() user: { id: string }) {
     const result = await this.managersService.findAll(user.id);
     return {
@@ -40,6 +52,8 @@ export class ManagersController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a manager by ID' })
+  @ApiResponse({ status: 200, description: 'Return manager details' })
   async findOne(@User() user: { id: string }, @Param('id') id: string) {
     const result = await this.managersService.findOne(user.id, id);
     return {
@@ -49,6 +63,8 @@ export class ManagersController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update a manager' })
+  @ApiResponse({ status: 200, description: 'Manager updated successfully' })
   async update(
     @User() user: { id: string },
     @Param('id') id: string,
@@ -63,6 +79,8 @@ export class ManagersController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a manager' })
+  @ApiResponse({ status: 200, description: 'Manager deleted successfully' })
   async remove(@User() user: { id: string }, @Param('id') id: string) {
     const result = await this.managersService.remove(user.id, id);
     return {

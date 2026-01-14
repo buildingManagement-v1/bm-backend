@@ -8,6 +8,12 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -15,11 +21,14 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 
+@ApiTags('Platform Admin Plans')
 @Controller('v1/platform/plans')
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
   @Get('public')
+  @ApiOperation({ summary: 'Get all active plans' })
+  @ApiResponse({ status: 200, description: 'Return all active plans' })
   async findAllActive() {
     const result = await this.plansService.findAllActive();
     return {
@@ -31,6 +40,9 @@ export class PlansController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create plan' })
+  @ApiResponse({ status: 201, description: 'Plan created successfully' })
   async create(
     @Body() dto: CreatePlanDto,
     @User() admin: { id: string; email: string },
@@ -52,6 +64,9 @@ export class PlansController {
     'system_manager',
     'billing_manager',
   )
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all plans' })
+  @ApiResponse({ status: 200, description: 'Return all plans' })
   async findAll() {
     const result = await this.plansService.findAll();
     return {
@@ -69,6 +84,9 @@ export class PlansController {
     'system_manager',
     'billing_manager',
   )
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get plan by ID' })
+  @ApiResponse({ status: 200, description: 'Return plan details' })
   async findOne(@Param('id') id: string) {
     const result = await this.plansService.findOne(id);
     return {
@@ -80,6 +98,9 @@ export class PlansController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update plan' })
+  @ApiResponse({ status: 200, description: 'Plan updated successfully' })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdatePlanDto,
@@ -101,6 +122,9 @@ export class PlansController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete plan' })
+  @ApiResponse({ status: 200, description: 'Plan deleted successfully' })
   async remove(
     @Param('id') id: string,
     @User() admin: { id: string; email: string },

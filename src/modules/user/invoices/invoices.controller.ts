@@ -1,4 +1,10 @@
 import { Controller, Get, Param, Res, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { InvoicesService } from './invoices.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { BuildingAccessGuard } from '../../../common/guards/building-access.guard';
@@ -9,6 +15,8 @@ import { ManagerRole } from 'generated/prisma/client';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 import type { Response } from 'express';
 
+@ApiTags('Invoices')
+@ApiBearerAuth()
 @Controller('v1/app/invoices')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class InvoicesController {
@@ -17,6 +25,8 @@ export class InvoicesController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Get all invoices' })
+  @ApiResponse({ status: 200, description: 'Return all invoices' })
   async findAll(@BuildingId() buildingId: string) {
     const result = await this.invoicesService.findAll(buildingId);
     return {
@@ -28,6 +38,8 @@ export class InvoicesController {
   @Get(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Get invoice by ID' })
+  @ApiResponse({ status: 200, description: 'Return invoice details' })
   async findOne(@BuildingId() buildingId: string, @Param('id') id: string) {
     const result = await this.invoicesService.findOne(id, buildingId);
     return {
@@ -39,6 +51,8 @@ export class InvoicesController {
   @Get(':id/download')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Download invoice PDF' })
+  @ApiResponse({ status: 200, description: 'Return invoice PDF' })
   async downloadInvoice(
     @BuildingId() buildingId: string,
     @Param('id') id: string,

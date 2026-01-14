@@ -15,13 +15,22 @@ import {
 } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { User } from '../../../common/decorators/user.decorator';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('Manager Auth')
 @Controller('v1/manager/auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Manager login' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
   async login(@Body() dto: LoginManagerDto) {
     const result = await this.authService.login(dto);
     return {
@@ -33,6 +42,9 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change manager password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
   async changePassword(
     @User() user: { id: string },
     @Body() dto: ChangePasswordDto,
@@ -45,6 +57,8 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset OTP' })
+  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const result = await this.authService.forgotPassword(dto);
     return {
@@ -54,6 +68,8 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password with OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     const result = await this.authService.resetPassword(dto);
     return {
@@ -64,6 +80,8 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
   async refresh(@Body() body: { refreshToken: string }) {
     const result = await this.authService.refresh(body.refreshToken);
     return {

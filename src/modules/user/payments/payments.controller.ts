@@ -1,4 +1,10 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto';
 import { ManagerRole } from 'generated/prisma/client';
@@ -10,6 +16,8 @@ import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 
+@ApiTags('Payments')
+@ApiBearerAuth()
 @Controller('v1/app/payments')
 @UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class PaymentsController {
@@ -18,6 +26,8 @@ export class PaymentsController {
   @Post()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Create a payment' })
+  @ApiResponse({ status: 201, description: 'Payment recorded successfully' })
   async create(
     @BuildingId() buildingId: string,
     @Body() dto: CreatePaymentDto,
@@ -39,6 +49,8 @@ export class PaymentsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Get all payments' })
+  @ApiResponse({ status: 200, description: 'Return all payments' })
   async findAll(@BuildingId() buildingId: string) {
     const result = await this.paymentsService.findAll(buildingId);
     return {
@@ -50,6 +62,8 @@ export class PaymentsController {
   @Get(':id')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Get a payment by ID' })
+  @ApiResponse({ status: 200, description: 'Return payment details' })
   async findOne(@BuildingId() buildingId: string, @Param('id') id: string) {
     const result = await this.paymentsService.findOne(id, buildingId);
     return {
@@ -61,6 +75,8 @@ export class PaymentsController {
   @Get('calendar/:tenantId')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
+  @ApiOperation({ summary: 'Get payment calendar for a tenant' })
+  @ApiResponse({ status: 200, description: 'Return payment calendar' })
   async getPaymentCalendar(
     @BuildingId() buildingId: string,
     @Param('tenantId') tenantId: string,
