@@ -28,6 +28,7 @@ import { PdfModule } from './common/pdf/pdf.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SchedulerModule } from './common/scheduler/scheduler.module';
 import { NotificationsModule } from './common/notifications/notifications.module';
+import { PlanLimitsModule } from './common/plan-limits/plan-limits.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { NotificationsModule } from './common/notifications/notifications.module
     ScheduleModule.forRoot(),
     SchedulerModule,
     NotificationsModule,
+    PlanLimitsModule,
   ],
 })
 export class AppModule implements NestModule {

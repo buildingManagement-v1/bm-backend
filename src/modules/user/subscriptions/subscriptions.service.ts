@@ -43,12 +43,7 @@ export class SubscriptionsService {
       throw new BadRequestException('User already has an active subscription');
     }
 
-    const totalAmount = this.calculateBilling(
-      dto.buildingCount,
-      dto.managerCount,
-      Number(plan.buildingPrice),
-      Number(plan.managerPrice),
-    );
+    const totalAmount = Number(plan.price);
 
     const billingCycleStart = new Date(dto.billingCycleStart);
     const billingCycleEnd = new Date(billingCycleStart);
@@ -59,8 +54,6 @@ export class SubscriptionsService {
       data: {
         userId: dto.userId,
         planId: dto.planId,
-        buildingCount: dto.buildingCount,
-        managerCount: dto.managerCount,
         totalAmount,
         billingCycleStart,
         billingCycleEnd,
@@ -78,8 +71,6 @@ export class SubscriptionsService {
         subscriptionId: subscription.id,
         action: 'created',
         newPlanId: dto.planId,
-        newBuildingCount: dto.buildingCount,
-        newManagerCount: dto.managerCount,
       },
     });
 
@@ -92,8 +83,6 @@ export class SubscriptionsService {
       details: {
         userId: dto.userId,
         planName: plan.name,
-        buildingCount: dto.buildingCount,
-        managerCount: dto.managerCount,
         totalAmount: Number(totalAmount),
       } as Prisma.InputJsonValue,
     });
@@ -225,12 +214,7 @@ export class SubscriptionsService {
     };
   }
 
-  async calculateUpgradeProrating(
-    subscriptionId: string,
-    newPlanId: string,
-    newBuildingCount: number,
-    newManagerCount: number,
-  ) {
+  async calculateUpgradeProrating(subscriptionId: string, newPlanId: string) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
       include: { plan: true },
@@ -270,12 +254,7 @@ export class SubscriptionsService {
     const oldTotal = Number(subscription.totalAmount);
     const oldUnused = oldTotal * (daysLeft / totalDays);
 
-    const newTotal = this.calculateBilling(
-      newBuildingCount,
-      newManagerCount,
-      Number(newPlan.buildingPrice),
-      Number(newPlan.managerPrice),
-    );
+    const newTotal = Number(newPlan.price);
     const newCost = newTotal * (daysLeft / totalDays);
     const proratedAmount = newCost - oldUnused;
 
@@ -296,8 +275,6 @@ export class SubscriptionsService {
   async upgrade(
     subscriptionId: string,
     newPlanId: string,
-    newBuildingCount: number,
-    newManagerCount: number,
     adminId: string,
     adminName: string,
   ) {
@@ -340,12 +317,7 @@ export class SubscriptionsService {
     const oldTotal = Number(subscription.totalAmount);
     const oldUnused = oldTotal * (daysLeft / totalDays);
 
-    const newTotal = this.calculateBilling(
-      newBuildingCount,
-      newManagerCount,
-      Number(newPlan.buildingPrice),
-      Number(newPlan.managerPrice),
-    );
+    const newTotal = Number(newPlan.price);
     const newCost = newTotal * (daysLeft / totalDays);
     const proratedAmount = newCost - oldUnused;
 
@@ -353,8 +325,6 @@ export class SubscriptionsService {
       where: { id: subscriptionId },
       data: {
         planId: newPlanId,
-        buildingCount: newBuildingCount,
-        managerCount: newManagerCount,
         totalAmount: newTotal,
       },
       include: { plan: true },
@@ -367,10 +337,6 @@ export class SubscriptionsService {
         action: 'upgraded',
         oldPlanId: subscription.planId,
         newPlanId: newPlanId,
-        oldBuildingCount: subscription.buildingCount,
-        newBuildingCount: newBuildingCount,
-        oldManagerCount: subscription.managerCount,
-        newManagerCount: newManagerCount,
         proratedAmount,
         notes: `Upgraded from ${subscription.plan.name} to ${newPlan.name}. Days remaining: ${daysLeft}`,
       },
@@ -424,24 +390,11 @@ export class SubscriptionsService {
       userName: user?.name || 'User',
       userEmail: user?.email || '',
       planName: subscription.plan.name,
-      buildingCount: subscription.buildingCount,
-      managerCount: subscription.managerCount,
-      buildingPrice: Number(subscription.plan.buildingPrice),
-      managerPrice: Number(subscription.plan.managerPrice),
       totalAmount: Number(subscription.totalAmount),
       billingPeriod: {
         start: subscription.billingCycleStart,
         end: subscription.billingCycleEnd,
       },
     });
-  }
-
-  private calculateBilling(
-    buildingCount: number,
-    managerCount: number,
-    buildingPrice: number,
-    managerPrice: number,
-  ): number {
-    return buildingCount * buildingPrice + managerCount * managerPrice;
   }
 }

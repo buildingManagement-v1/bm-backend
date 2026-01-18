@@ -1,26 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsInt, Min, IsDateString } from 'class-validator';
+import { IsString, IsDateString } from 'class-validator';
 
 export class CreateSubscriptionDto {
-  @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174005' })
+  @ApiProperty({
+    example: 'user-uuid-here',
+    description: 'User ID to assign subscription to',
+  })
   @IsString()
   userId: string;
 
-  @ApiProperty({ example: 'plan_123' })
+  @ApiProperty({
+    example: 'plan-uuid-here',
+    description: 'Plan ID to subscribe to',
+  })
   @IsString()
   planId: string;
 
-  @ApiProperty({ example: 5 })
-  @IsInt()
-  @Min(1)
-  buildingCount: number;
-
-  @ApiProperty({ example: 2 })
-  @IsInt()
-  @Min(0)
-  managerCount: number;
-
-  @ApiProperty({ example: '2025-01-01T00:00:00Z' })
+  @ApiProperty({
+    example: '2026-01-18',
+    description: 'Billing cycle start date (YYYY-MM-DD)',
+  })
   @IsDateString()
   billingCycleStart: string;
 }

@@ -27,8 +27,7 @@ export class PlansService {
     const plan = await this.prisma.subscriptionPlan.create({
       data: {
         name: dto.name,
-        buildingPrice: dto.buildingPrice,
-        managerPrice: dto.managerPrice,
+        price: dto.price,
         features: dto.features,
       },
     });
@@ -41,8 +40,7 @@ export class PlansService {
       adminName,
       details: {
         name: plan.name,
-        buildingPrice: Number(plan.buildingPrice),
-        managerPrice: Number(plan.managerPrice),
+        price: Number(plan.price),
       } as Prisma.InputJsonValue,
     });
 
@@ -58,8 +56,8 @@ export class PlansService {
 
   async findAllActive() {
     const plans = await this.prisma.subscriptionPlan.findMany({
-      where: { status: 'active' },
-      orderBy: { buildingPrice: 'asc' },
+      where: { status: 'active', type: 'public' },
+      orderBy: { price: 'asc' },
     });
     return plans;
   }
@@ -114,10 +112,7 @@ export class PlansService {
       details: {
         changes: {
           name: dto.name,
-          buildingPrice: dto.buildingPrice
-            ? Number(dto.buildingPrice)
-            : undefined,
-          managerPrice: dto.managerPrice ? Number(dto.managerPrice) : undefined,
+          price: dto.price ? Number(dto.price) : undefined,
           features: dto.features,
           status: dto.status,
         },

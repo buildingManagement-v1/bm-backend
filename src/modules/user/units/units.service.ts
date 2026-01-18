@@ -7,12 +7,14 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUnitDto, UpdateUnitDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
+import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
 
 @Injectable()
 export class UnitsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private planLimitsService: PlanLimitsService,
   ) {}
 
   async create(
@@ -21,6 +23,8 @@ export class UnitsService {
     userId: string,
     userRole: string,
   ) {
+    await this.planLimitsService.canCreateUnit(buildingId);
+
     const existingUnit = await this.prisma.unit.findUnique({
       where: {
         buildingId_unitNumber: {

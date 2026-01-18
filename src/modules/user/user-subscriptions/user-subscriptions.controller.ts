@@ -76,8 +76,6 @@ export class UserSubscriptionsController {
     const result = await this.subscriptionsService.calculateUpgradeProrating(
       activeSubscription.id,
       dto.newPlanId,
-      dto.newBuildingCount,
-      dto.newManagerCount,
     );
 
     return result;
@@ -107,8 +105,6 @@ export class UserSubscriptionsController {
     const result = await this.subscriptionsService.upgrade(
       activeSubscription.id,
       dto.newPlanId,
-      dto.newBuildingCount,
-      dto.newManagerCount,
       user.id,
       `${user.email} (Self-Service)`,
     );
@@ -151,8 +147,6 @@ export class UserSubscriptionsController {
       {
         userId: user.id,
         planId: freePlan.id,
-        buildingCount: 1,
-        managerCount: 1,
         billingCycleStart: new Date().toISOString(),
       },
       user.id,

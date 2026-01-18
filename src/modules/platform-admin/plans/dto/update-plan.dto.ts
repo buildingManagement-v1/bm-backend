@@ -15,20 +15,19 @@ export class UpdatePlanDto {
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ example: 100, required: false })
+  @ApiProperty({ example: 499.99, required: false })
   @IsNumber()
   @Min(0)
   @IsOptional()
-  buildingPrice?: number;
-
-  @ApiProperty({ example: 50, required: false })
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  managerPrice?: number;
+  price?: number;
 
   @ApiProperty({
-    example: { feature1: true, feature2: 'limited' },
+    example: {
+      maxBuildings: 5,
+      maxUnits: 50,
+      maxManagers: 7,
+      premiumFeatures: [],
+    },
     required: false,
   })
   @IsObject()
@@ -39,4 +38,13 @@ export class UpdatePlanDto {
   @IsEnum(PlanStatus)
   @IsOptional()
   status?: PlanStatus;
+
+  @ApiProperty({
+    enum: ['public', 'custom'],
+    example: 'public',
+    required: false,
+  })
+  @IsEnum(['public', 'custom'])
+  @IsOptional()
+  type?: 'public' | 'custom';
 }

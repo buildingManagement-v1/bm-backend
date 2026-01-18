@@ -23,17 +23,12 @@ interface SubscriptionInvoiceData {
   userName: string;
   userEmail: string;
   planName: string;
-  buildingCount: number;
-  managerCount: number;
-  buildingPrice: number;
-  managerPrice: number;
   totalAmount: number;
   billingPeriod: {
     start: Date;
     end: Date;
   };
   proratedAmount?: number;
-  action?: string;
 }
 
 @Injectable()
@@ -153,75 +148,43 @@ export class PdfService {
 
     doc.fontSize(12).text(`Plan: ${data.planName}`, 50, tableTop);
 
-    if (data.action) {
-      doc.text(`Action: ${data.action}`, 50, tableTop + 20);
-    }
-
     doc
       .fontSize(10)
       .text(
         `Billing Period: ${data.billingPeriod.start.toLocaleDateString()} - ${data.billingPeriod.end.toLocaleDateString()}`,
         50,
-        tableTop + 40,
+        tableTop + 20,
       );
 
-    // Items Table Header
-    const itemsTop = tableTop + 80;
+    // Amount section
+    let yPosition = tableTop + 80;
 
     doc
       .fontSize(10)
-      .text('Description', 50, itemsTop)
-      .text('Quantity', 350, itemsTop)
-      .text('Price', 450, itemsTop, { align: 'right' });
+      .text('Description', 50, yPosition)
+      .text('Amount', 450, yPosition, { align: 'right' });
 
     doc
-      .moveTo(50, itemsTop + 15)
-      .lineTo(550, itemsTop + 15)
+      .moveTo(50, yPosition + 15)
+      .lineTo(550, yPosition + 15)
       .stroke();
 
-    let yPosition = itemsTop + 25;
+    yPosition += 25;
 
-    // Buildings
+    // Plan subscription
     doc
       .fontSize(10)
-      .text('Buildings', 50, yPosition)
-      .text(data.buildingCount.toString(), 350, yPosition)
-      .text(`$${data.buildingPrice.toFixed(2)}`, 450, yPosition, {
+      .text(`${data.planName} - Annual Subscription`, 50, yPosition)
+      .text(`$${data.totalAmount.toFixed(2)}`, 450, yPosition, {
         align: 'right',
       });
 
-    yPosition += 20;
-
-    // Managers
-    doc
-      .text('Managers', 50, yPosition)
-      .text(data.managerCount.toString(), 350, yPosition)
-      .text(`$${data.managerPrice.toFixed(2)}`, 450, yPosition, {
-        align: 'right',
-      });
-
-    yPosition += 20;
-
-    // Subtotal
-    doc.moveTo(50, yPosition).lineTo(550, yPosition).stroke();
-
-    yPosition += 10;
-
-    const subtotal =
-      data.buildingCount * data.buildingPrice +
-      data.managerCount * data.managerPrice;
-
-    doc
-      .fontSize(10)
-      .text('Subtotal:', 400, yPosition)
-      .text(`$${subtotal.toFixed(2)}`, 450, yPosition, { align: 'right' });
-
-    yPosition += 20;
+    yPosition += 30;
 
     // Prorated amount if exists
-    if (data.proratedAmount !== undefined && data.proratedAmount !== subtotal) {
+    if (data.proratedAmount !== undefined) {
       doc
-        .text('Prorated Amount:', 400, yPosition)
+        .text('Prorated Amount (Upgrade):', 400, yPosition)
         .text(`$${data.proratedAmount.toFixed(2)}`, 450, yPosition, {
           align: 'right',
         });

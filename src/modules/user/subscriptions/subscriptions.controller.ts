@@ -102,8 +102,6 @@ export class SubscriptionsController {
     return await this.subscriptionsService.upgrade(
       id,
       upgradeDto.newPlanId,
-      upgradeDto.newBuildingCount,
-      upgradeDto.newManagerCount,
       admin.id,
       admin.email,
     );
@@ -119,8 +117,6 @@ export class SubscriptionsController {
     return await this.subscriptionsService.calculateUpgradeProrating(
       id,
       dto.newPlanId,
-      dto.newBuildingCount,
-      dto.newManagerCount,
     );
   }
 

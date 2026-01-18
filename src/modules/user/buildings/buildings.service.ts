@@ -5,12 +5,18 @@ import {
 } from '@nestjs/common';
 import { CreateBuildingDto, UpdateBuildingDto } from './dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
 
 @Injectable()
 export class BuildingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private planLimitsService: PlanLimitsService,
+  ) {}
 
   async create(userId: string, dto: CreateBuildingDto) {
+    await this.planLimitsService.canCreateBuilding(userId);
+
     const building = await this.prisma.building.create({
       data: {
         userId,

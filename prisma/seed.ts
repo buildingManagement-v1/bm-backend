@@ -33,15 +33,15 @@ async function main() {
     update: {},
     create: {
       name: 'Free',
-      buildingPrice: 0,
-      managerPrice: 0,
+      price: 0,
       features: {
         maxBuildings: 1,
-        maxManagers: 1,
-        maxUnits: 10,
-        support: 'Email',
+        maxUnits: 30,
+        maxManagers: 5,
+        premiumFeatures: [],
       },
       status: 'active',
+      type: 'public',
     },
   });
 
@@ -50,20 +50,38 @@ async function main() {
     update: {},
     create: {
       name: 'Pro',
-      buildingPrice: 99.99,
-      managerPrice: 29.99,
+      price: 499.99,
       features: {
-        maxBuildings: 999,
-        maxManagers: 999,
-        maxUnits: 999,
-        support: 'Priority Phone & Email',
+        maxBuildings: 5,
+        maxUnits: 50,
+        maxManagers: 7,
+        premiumFeatures: [],
       },
       status: 'active',
+      type: 'public',
+    },
+  });
+
+  const enterprisePlan = await prisma.subscriptionPlan.upsert({
+    where: { name: 'Enterprise' },
+    update: {},
+    create: {
+      name: 'Enterprise',
+      price: 1999.99,
+      features: {
+        maxBuildings: 999999,
+        maxUnits: 999999,
+        maxManagers: 999999,
+        premiumFeatures: [],
+      },
+      status: 'active',
+      type: 'public',
     },
   });
 
   console.log('Free plan created:', freePlan);
   console.log('Pro plan created:', proPlan);
+  console.log('Enterprise plan created:', enterprisePlan);
 }
 
 main()

@@ -11,6 +11,7 @@ import { UserStatus } from 'generated/prisma/enums';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import { EmailService } from 'src/common/email/email.service';
+import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
 
 @Injectable()
 export class ManagersService {
@@ -18,9 +19,12 @@ export class ManagersService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
+    private planLimitsService: PlanLimitsService,
   ) {}
 
   async create(userId: string, dto: CreateManagerDto) {
+    await this.planLimitsService.canCreateManager(userId);
+
     // Check if email already exists
     const existing = await this.prisma.manager.findUnique({
       where: { email: dto.email },
