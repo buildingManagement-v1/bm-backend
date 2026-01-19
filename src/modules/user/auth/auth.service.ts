@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -43,6 +44,47 @@ export class AuthService {
         email: dto.email,
         passwordHash: hashedPassword,
         phone: dto.phone,
+      },
+    });
+
+    // Auto-assign Free plan
+    const freePlan = await this.prisma.subscriptionPlan.findFirst({
+      where: {
+        name: {
+          equals: 'free',
+          mode: 'insensitive',
+        },
+        status: 'active',
+      },
+    });
+
+    if (!freePlan) {
+      throw new InternalServerErrorException('Free plan not found');
+    }
+
+    const billingCycleStart = new Date();
+    const billingCycleEnd = new Date(billingCycleStart);
+    billingCycleEnd.setMonth(billingCycleEnd.getMonth() + 4); // 4 months for Free plan
+    const nextBillingDate = new Date(billingCycleEnd);
+
+    const subscription = await this.prisma.subscription.create({
+      data: {
+        userId: user.id,
+        planId: freePlan.id,
+        totalAmount: 0,
+        billingCycleStart,
+        billingCycleEnd,
+        nextBillingDate,
+        status: 'active',
+      },
+    });
+
+    await this.prisma.subscriptionHistory.create({
+      data: {
+        userId: user.id,
+        subscriptionId: subscription.id,
+        action: 'created',
+        newPlanId: freePlan.id,
       },
     });
 
