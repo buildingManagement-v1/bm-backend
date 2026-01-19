@@ -409,4 +409,118 @@ export class EmailService {
     `,
     });
   }
+
+  async sendSubscriptionInvoiceEmail(
+    email: string,
+    name: string,
+    planName: string,
+    amount: number,
+    invoiceNumber: string,
+    pdfBuffer: Buffer,
+  ) {
+    await this.resend.emails.send({
+      from: 'BMS <onboarding@resend.dev>',
+      to: email,
+      subject: `Subscription Invoice - ${invoiceNumber}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #8B5CF6;">Subscription Invoice</h1>
+          <p>Hi ${name},</p>
+          <p>Thank you for subscribing to the <strong>${planName}</strong> plan.</p>
+          <p style="font-size: 18px; color: #111827;">Amount: <strong>$${amount.toFixed(2)}</strong></p>
+          <p>Your invoice is attached to this email.</p>
+          <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
+            <p style="margin: 0; color: #6B7280; font-size: 14px;">
+              Need help? Contact us at support@bms.com
+            </p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `${invoiceNumber}.pdf`,
+          content: pdfBuffer,
+        },
+      ],
+    });
+  }
+
+  async sendPaymentInvoiceEmail(
+    email: string,
+    tenantName: string,
+    amount: number,
+    paymentDate: Date,
+    invoiceNumber: string,
+    pdfBuffer: Buffer,
+  ) {
+    await this.resend.emails.send({
+      from: 'BMS <onboarding@resend.dev>',
+      to: email,
+      subject: `Payment Receipt - ${invoiceNumber}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #3B82F6;">Payment Receipt</h1>
+          <p>Hi ${tenantName},</p>
+          <p>Thank you for your payment.</p>
+          <div style="margin: 20px 0; padding: 20px; background-color: #EFF6FF; border-left: 4px solid #3B82F6; border-radius: 4px;">
+            <p style="margin: 5px 0;"><strong>Invoice:</strong> ${invoiceNumber}</p>
+            <p style="margin: 5px 0;"><strong>Amount:</strong> $${amount.toFixed(2)}</p>
+            <p style="margin: 5px 0;"><strong>Date:</strong> ${paymentDate.toLocaleDateString()}</p>
+          </div>
+          <p>Your receipt is attached to this email.</p>
+          <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
+            <p style="margin: 0; color: #6B7280; font-size: 14px;">
+              Questions? Contact us at support@bms.com
+            </p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `${invoiceNumber}.pdf`,
+          content: pdfBuffer,
+        },
+      ],
+    });
+  }
+
+  async sendUpgradeInvoiceEmail(
+    email: string,
+    name: string,
+    oldPlan: string,
+    newPlan: string,
+    amount: number,
+    invoiceNumber: string,
+    pdfBuffer: Buffer,
+  ) {
+    await this.resend.emails.send({
+      from: 'BMS <onboarding@resend.dev>',
+      to: email,
+      subject: `Subscription Upgrade Invoice - ${invoiceNumber}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #8B5CF6;">Subscription Upgraded</h1>
+          <p>Hi ${name},</p>
+          <p>Your subscription has been successfully upgraded!</p>
+          <div style="margin: 20px 0; padding: 20px; background-color: #F5F3FF; border-left: 4px solid #8B5CF6; border-radius: 4px;">
+            <p style="margin: 5px 0;"><strong>Previous Plan:</strong> ${oldPlan}</p>
+            <p style="margin: 5px 0;"><strong>New Plan:</strong> ${newPlan}</p>
+            <p style="margin: 5px 0;"><strong>Prorated Amount:</strong> $${amount.toFixed(2)}</p>
+          </div>
+          <p>Your upgrade invoice is attached to this email.</p>
+          <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
+            <p style="margin: 0; color: #6B7280; font-size: 14px;">
+              Need help? Contact us at support@bms.com
+            </p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `${invoiceNumber}.pdf`,
+          content: pdfBuffer,
+        },
+      ],
+    });
+  }
 }

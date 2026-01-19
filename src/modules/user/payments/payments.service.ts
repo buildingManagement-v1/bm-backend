@@ -8,6 +8,7 @@ import { Prisma } from 'generated/prisma/client';
 import { CreatePaymentDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
+import { PdfService } from 'src/common/pdf/pdf.service';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -21,6 +22,7 @@ export class PaymentsService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
+    private pdfService: PdfService,
   ) {}
 
   async create(
@@ -51,6 +53,12 @@ export class PaymentsService {
     }
 
     const invoiceNumber = await this.generateInvoiceNumber(buildingId);
+
+    // Get building info for invoice
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { name: true, address: true, city: true, country: true },
+    });
 
     const payment = await this.prisma.$transaction(async (tx) => {
       const newPayment = await tx.payment.create({
@@ -132,12 +140,44 @@ export class PaymentsService {
       } as Prisma.InputJsonValue,
     });
 
-    await this.emailService.sendPaymentReceiptEmail(
+    // Generate PDF invoice
+    const buildingAddress = building?.address
+      ? `${building.address}${building.city ? ', ' + building.city : ''}${building.country ? ', ' + building.country : ''}`
+      : undefined;
+
+    const pdfDoc = this.pdfService.generatePaymentInvoice({
+      invoiceNumber,
+      date: payment!.paymentDate,
+      buildingName: building?.name || 'Building',
+      buildingAddress,
+      tenantName: payment!.tenant.name,
+      tenantEmail: payment!.tenant.email,
+      items: [
+        {
+          description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${payment!.unit?.unitNumber || 'N/A'}`,
+          amount: Number(payment!.amount),
+        },
+      ],
+      total: Number(payment!.amount),
+      status: 'paid',
+    });
+
+    // Convert PDF stream to buffer
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      pdfDoc.on('data', (chunk) => chunks.push(chunk));
+      pdfDoc.on('end', () => resolve(Buffer.concat(chunks)));
+      pdfDoc.on('error', reject);
+    });
+
+    // Send email with PDF invoice
+    await this.emailService.sendPaymentInvoiceEmail(
       payment!.tenant.email,
       payment!.tenant.name,
       Number(payment!.amount),
       payment!.paymentDate,
-      payment!.invoice?.invoiceNumber || '',
+      invoiceNumber,
+      pdfBuffer,
     );
 
     return payment!;

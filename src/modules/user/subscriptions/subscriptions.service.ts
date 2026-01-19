@@ -93,11 +93,37 @@ export class SubscriptionsService {
     });
 
     if (user) {
-      await this.emailService.sendSubscriptionCreatedEmail(
+      // Generate PDF invoice
+      const invoiceNumber = `SUB-${subscription.id.substring(0, 8)}`;
+      const pdfDoc = this.pdfService.generateSubscriptionInvoice({
+        invoiceNumber,
+        date: subscription.createdAt,
+        userName: user.name,
+        userEmail: user.email,
+        planName: plan.name,
+        totalAmount: Number(totalAmount),
+        billingPeriod: {
+          start: subscription.billingCycleStart,
+          end: subscription.billingCycleEnd,
+        },
+      });
+
+      // Convert PDF stream to buffer
+      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        pdfDoc.on('data', (chunk) => chunks.push(chunk));
+        pdfDoc.on('end', () => resolve(Buffer.concat(chunks)));
+        pdfDoc.on('error', reject);
+      });
+
+      // Send email with PDF attachment
+      await this.emailService.sendSubscriptionInvoiceEmail(
         user.email,
         user.name,
         plan.name,
         Number(totalAmount),
+        invoiceNumber,
+        pdfBuffer,
       );
     }
 
@@ -356,6 +382,49 @@ export class SubscriptionsService {
         daysRemaining: daysLeft,
       } as Prisma.InputJsonValue,
     });
+
+    // Get user info and send upgrade invoice email
+    const user = await this.prisma.user.findUnique({
+      where: { id: subscription.userId },
+      select: { name: true, email: true },
+    });
+
+    if (user) {
+      // Generate PDF invoice with prorated amount
+      const invoiceNumber = `SUB-UPG-${subscriptionId.substring(0, 8)}`;
+      const pdfDoc = this.pdfService.generateSubscriptionInvoice({
+        invoiceNumber,
+        date: new Date(),
+        userName: user.name,
+        userEmail: user.email,
+        planName: newPlan.name,
+        totalAmount: Number(newTotal),
+        billingPeriod: {
+          start: subscription.billingCycleStart,
+          end: subscription.billingCycleEnd,
+        },
+        proratedAmount: Number(proratedAmount.toFixed(2)),
+      });
+
+      // Convert PDF stream to buffer
+      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        pdfDoc.on('data', (chunk) => chunks.push(chunk));
+        pdfDoc.on('end', () => resolve(Buffer.concat(chunks)));
+        pdfDoc.on('error', reject);
+      });
+
+      // Send email with PDF attachment
+      await this.emailService.sendUpgradeInvoiceEmail(
+        user.email,
+        user.name,
+        subscription.plan.name,
+        newPlan.name,
+        Number(proratedAmount.toFixed(2)),
+        invoiceNumber,
+        pdfBuffer,
+      );
+    }
 
     return {
       success: true,
