@@ -236,9 +236,29 @@ export class PaymentsService {
   }
 
   private async generateInvoiceNumber(buildingId: string): Promise<string> {
-    const count = await this.prisma.invoice.count({ where: { buildingId } });
     const year = new Date().getFullYear();
-    return `INV-${year}-${String(count + 1).padStart(5, '0')}`;
+    let invoiceNumber: string;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      const count = await this.prisma.invoice.count({ where: { buildingId } });
+      invoiceNumber = `INV-${year}-${String(count + 1).padStart(5, '0')}`;
+
+      // Check if this number already exists
+      const existing = await this.prisma.invoice.findUnique({
+        where: { invoiceNumber },
+      });
+
+      if (!existing) {
+        return invoiceNumber;
+      }
+
+      attempts++;
+    }
+
+    const timestamp = Date.now();
+    return `INV-${year}-${timestamp}`;
   }
 
   private async getUserName(userId: string, userRole: string): Promise<string> {

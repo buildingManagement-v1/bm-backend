@@ -48,12 +48,65 @@ export class EmailService {
     await this.resend.emails.send({
       from: 'BMS <onboarding@resend.dev>',
       to: email,
-      subject: 'Your Manager Account Has Been Created',
+      subject: 'You have Been Invited as a Building Manager',
       html: `
-        <h1>Welcome ${name}!</h1>
-        <p>A manager account has been created for you.</p>
-        <p>Temporary Password: <strong>${temporaryPassword}</strong></p>
-        <p>Please log in and change your password immediately.</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <!-- Header -->
+          <div style="border-bottom: 3px solid #3B82F6; padding-bottom: 20px; margin-bottom: 30px;">
+            <h1 style="color: #111827; font-size: 28px; font-weight: 600; margin: 0;">
+              Welcome to the Team
+            </h1>
+          </div>
+
+          <!-- Greeting -->
+          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+            Hi ${name},
+          </p>
+
+          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+            You've been invited to join as a <strong>Building Manager</strong>. Your account has been created and is ready to use.
+          </p>
+
+          <!-- Login Credentials Box -->
+          <div style="background-color: #F3F4F6; border-left: 4px solid #3B82F6; border-radius: 6px; padding: 24px; margin-bottom: 30px;">
+            <h2 style="color: #111827; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">
+              Your Login Credentials
+            </h2>
+            <div style="margin-bottom: 12px;">
+              <span style="color: #6B7280; font-size: 14px; display: block; margin-bottom: 4px;">Email</span>
+              <span style="color: #111827; font-size: 16px; font-weight: 500;">${email}</span>
+            </div>
+            <div>
+              <span style="color: #6B7280; font-size: 14px; display: block; margin-bottom: 4px;">Temporary Password</span>
+              <code style="background-color: #FFFFFF; color: #111827; padding: 8px 12px; border-radius: 4px; font-size: 16px; font-family: 'Courier New', monospace; display: inline-block;">${temporaryPassword}</code>
+            </div>
+          </div>
+
+          <!-- Login Button -->
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${this.configService.get('FRONTEND_URL')}/login?type=manager" 
+               style="background-color: #3B82F6; color: #FFFFFF; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: 600; display: inline-block;">
+              Login to Your Account
+            </a>
+          </div>
+
+          <!-- Security Notice -->
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 16px; margin-bottom: 30px;">
+            <p style="color: #92400E; font-size: 14px; margin: 0; line-height: 1.5;">
+              <strong>Important:</strong> Please change your password immediately after your first login for security purposes.
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="border-top: 1px solid #E5E7EB; padding-top: 24px; margin-top: 40px;">
+            <p style="color: #9CA3AF; font-size: 14px; line-height: 1.6; margin: 0;">
+              Need help? Contact us at <a href="mailto:support@bms.com" style="color: #3B82F6; text-decoration: none;">support@bms.com</a>
+            </p>
+            <p style="color: #9CA3AF; font-size: 12px; margin-top: 12px;">
+              Building Management System
+            </p>
+          </div>
+        </div>
       `,
     });
   }

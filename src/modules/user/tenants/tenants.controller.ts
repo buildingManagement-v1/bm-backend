@@ -17,6 +17,7 @@ import {
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { OnboardTenantDto } from './dto/onboard-tenant.dto';
 import { ManagerRole } from 'generated/prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { BuildingAccessGuard } from 'src/common/guards/building-access.guard';
@@ -133,6 +134,31 @@ export class TenantsController {
     return {
       success: true,
       data: result,
+    };
+  }
+
+  @Post('onboard')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({
+    summary: 'Onboard a tenant (create tenant + assign unit + create lease)',
+  })
+  @ApiResponse({ status: 201, description: 'Tenant onboarded successfully' })
+  async onboard(
+    @User() user: { id: string; role: string },
+    @BuildingId() buildingId: string,
+    @Body() dto: OnboardTenantDto,
+  ) {
+    const result = await this.tenantsService.onboard(
+      buildingId,
+      user.id,
+      user.role,
+      dto,
+    );
+    return {
+      success: true,
+      data: result,
+      message: 'Tenant onboarded successfully',
     };
   }
 }
