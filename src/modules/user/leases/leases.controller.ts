@@ -127,4 +127,20 @@ export class LeasesController {
       data: result,
     };
   }
+
+  @Get('tenant/:tenantId')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({ summary: 'Get leases by tenant ID' })
+  @ApiResponse({ status: 200, description: 'Return tenant leases' })
+  async findByTenant(
+    @BuildingId() buildingId: string,
+    @Param('tenantId') tenantId: string,
+  ) {
+    const result = await this.leasesService.findByTenant(buildingId, tenantId);
+    return {
+      success: true,
+      data: result,
+    };
+  }
 }

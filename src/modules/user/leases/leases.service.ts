@@ -261,4 +261,24 @@ export class LeasesService {
     });
     return user?.name || 'Unknown';
   }
+
+  async findByTenant(buildingId: string, tenantId: string) {
+    // Verify tenant belongs to this building
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, buildingId },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found in this building');
+    }
+
+    return await this.prisma.lease.findMany({
+      where: {
+        buildingId,
+        tenantId,
+      },
+      include: leaseInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
