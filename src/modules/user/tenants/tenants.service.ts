@@ -34,25 +34,7 @@ export class TenantsService {
       throw new ConflictException('Tenant with this email already exists');
     }
 
-    if (dto.unitId) {
-      const unit = await this.prisma.unit.findFirst({
-        where: { id: dto.unitId, buildingId },
-      });
-
-      if (!unit) {
-        throw new NotFoundException('Unit not found in this building');
-      }
-
-      if (unit.status === 'occupied') {
-        throw new ConflictException('Unit is already occupied');
-      }
-    }
-
-    let passwordHash: string | undefined;
-
-    if (dto.password) {
-      passwordHash = await bcrypt.hash(dto.password, 10);
-    }
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...tenantData } = dto;
@@ -62,24 +44,9 @@ export class TenantsService {
         ...tenantData,
         buildingId,
         passwordHash,
-      },
-      include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
+        status: 'inactive',
       },
     });
-
-    if (dto.unitId) {
-      await this.prisma.unit.update({
-        where: { id: dto.unitId },
-        data: { status: 'occupied' },
-      });
-    }
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({
@@ -93,7 +60,6 @@ export class TenantsService {
       details: {
         name: tenant.name,
         email: tenant.email,
-        unitId: tenant.unitId,
       } as Prisma.InputJsonValue,
     });
 
@@ -111,43 +77,30 @@ export class TenantsService {
     return {
       id: tenant.id,
       buildingId: tenant.buildingId,
-      unitId: tenant.unitId,
       name: tenant.name,
       email: tenant.email,
       phone: tenant.phone,
       status: tenant.status,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
-      unit: tenant.unit,
     };
   }
 
   async findAll(buildingId: string) {
     const tenants = await this.prisma.tenant.findMany({
       where: { buildingId },
-      include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
-      },
       orderBy: { createdAt: 'desc' },
     });
 
     return tenants.map((tenant) => ({
       id: tenant.id,
       buildingId: tenant.buildingId,
-      unitId: tenant.unitId,
       name: tenant.name,
       email: tenant.email,
       phone: tenant.phone,
       status: tenant.status,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
-      unit: tenant.unit,
     }));
   }
 
@@ -155,21 +108,16 @@ export class TenantsService {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id, buildingId },
       include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
         leases: {
           orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            startDate: true,
-            endDate: true,
-            rentAmount: true,
-            status: true,
+          include: {
+            unit: {
+              select: {
+                id: true,
+                unitNumber: true,
+                floor: true,
+              },
+            },
           },
         },
       },
@@ -182,14 +130,12 @@ export class TenantsService {
     return {
       id: tenant.id,
       buildingId: tenant.buildingId,
-      unitId: tenant.unitId,
       name: tenant.name,
       email: tenant.email,
       phone: tenant.phone,
       status: tenant.status,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
-      unit: tenant.unit,
       leases: tenant.leases,
     };
   }
@@ -219,51 +165,9 @@ export class TenantsService {
       }
     }
 
-    if (dto.unitId !== undefined) {
-      if (dto.unitId && dto.unitId !== tenant.unitId) {
-        const newUnit = await this.prisma.unit.findFirst({
-          where: { id: dto.unitId, buildingId },
-        });
-
-        if (!newUnit) {
-          throw new NotFoundException('Unit not found in this building');
-        }
-
-        if (newUnit.status === 'occupied') {
-          throw new ConflictException('Unit is already occupied');
-        }
-
-        if (tenant.unitId) {
-          await this.prisma.unit.update({
-            where: { id: tenant.unitId },
-            data: { status: 'vacant' },
-          });
-        }
-
-        await this.prisma.unit.update({
-          where: { id: dto.unitId },
-          data: { status: 'occupied' },
-        });
-      } else if (dto.unitId === null && tenant.unitId) {
-        await this.prisma.unit.update({
-          where: { id: tenant.unitId },
-          data: { status: 'vacant' },
-        });
-      }
-    }
-
     const updated = await this.prisma.tenant.update({
       where: { id },
       data: dto,
-      include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
-      },
     });
 
     const userName = await this.getUserName(userId, userRole);
@@ -281,14 +185,12 @@ export class TenantsService {
     return {
       id: updated.id,
       buildingId: updated.buildingId,
-      unitId: updated.unitId,
       name: updated.name,
       email: updated.email,
       phone: updated.phone,
       status: updated.status,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
-      unit: updated.unit,
     };
   }
 
@@ -304,13 +206,6 @@ export class TenantsService {
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
-    }
-
-    if (tenant.unitId) {
-      await this.prisma.unit.update({
-        where: { id: tenant.unitId },
-        data: { status: 'vacant' },
-      });
     }
 
     await this.prisma.tenant.delete({
@@ -398,7 +293,6 @@ export class TenantsService {
       const tenant = await tx.tenant.create({
         data: {
           buildingId,
-          unitId: dto.unitId,
           name: dto.name,
           email: dto.email,
           phone: dto.phone,
@@ -465,7 +359,6 @@ export class TenantsService {
       details: {
         name: result.tenant.name,
         email: result.tenant.email,
-        unitId: result.tenant.unitId,
         leaseCreated: true,
       } as Prisma.InputJsonValue,
     });
@@ -495,10 +388,10 @@ export class TenantsService {
     const tenantWithDetails = await this.prisma.tenant.findUnique({
       where: { id: result.tenant.id },
       include: {
-        unit: true,
         leases: {
           where: { id: result.lease.id },
           include: {
+            unit: true,
             paymentPeriods: {
               orderBy: { month: 'asc' },
             },

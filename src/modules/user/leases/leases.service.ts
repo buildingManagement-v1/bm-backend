@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
@@ -70,6 +71,7 @@ export class LeasesService {
     }
 
     const lease = await this.prisma.$transaction(async (tx) => {
+      // Create lease
       const newLease = await tx.lease.create({
         data: {
           buildingId,
@@ -85,7 +87,19 @@ export class LeasesService {
         include: leaseInclude,
       });
 
-      // Generate payment periods for lease duration
+      // Update unit to occupied
+      await tx.unit.update({
+        where: { id: dto.unitId },
+        data: { status: 'occupied' },
+      });
+
+      // Activate tenant
+      await tx.tenant.update({
+        where: { id: dto.tenantId },
+        data: { status: 'active' },
+      });
+
+      // Generate payment periods
       const months = this.generateMonthsBetween(
         new Date(dto.startDate),
         new Date(dto.endDate),
@@ -166,6 +180,16 @@ export class LeasesService {
 
     if (!lease) {
       throw new NotFoundException('Lease not found');
+    }
+
+    // If status is being changed to terminated, use terminate method
+    if (dto.status === 'terminated' && lease.status !== 'terminated') {
+      return await this.terminate(id, buildingId, userId, userRole);
+    }
+
+    // Prevent editing terminated leases
+    if (lease.status === 'terminated') {
+      throw new ConflictException('Cannot edit a terminated lease');
     }
 
     const updated = await this.prisma.lease.update({
@@ -280,5 +304,48 @@ export class LeasesService {
       include: leaseInclude,
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async terminate(
+    id: string,
+    buildingId: string,
+    userId: string,
+    userRole: string,
+  ) {
+    const lease = await this.prisma.lease.findFirst({
+      where: { id, buildingId },
+    });
+
+    if (!lease) {
+      throw new NotFoundException('Lease not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Terminate lease
+      await tx.lease.update({
+        where: { id },
+        data: { status: 'terminated' },
+      });
+
+      // Free the unit
+      await tx.unit.update({
+        where: { id: lease.unitId },
+        data: { status: 'vacant' },
+      });
+    });
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'update',
+      entityType: 'lease',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: { status: 'terminated' } as Prisma.InputJsonValue,
+    });
+
+    return { message: 'Lease terminated successfully' };
   }
 }

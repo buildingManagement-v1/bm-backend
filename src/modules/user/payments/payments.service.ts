@@ -12,7 +12,6 @@ import { PdfService } from 'src/common/pdf/pdf.service';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
-  unit: { select: { id: true, unitNumber: true, floor: true } },
   invoice: { select: { id: true, invoiceNumber: true } },
 } satisfies Prisma.PaymentInclude;
 
@@ -34,7 +33,6 @@ export class PaymentsService {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: dto.tenantId, buildingId },
       include: {
-        unit: true,
         leases: {
           where: { status: 'active' },
           orderBy: { startDate: 'desc' },
@@ -65,7 +63,7 @@ export class PaymentsService {
         data: {
           buildingId,
           tenantId: dto.tenantId,
-          unitId: tenant.unitId,
+          unitId: activeLease.unitId,
           amount: dto.amount,
           type: dto.type,
           status: 'completed',
@@ -78,7 +76,7 @@ export class PaymentsService {
         data: {
           buildingId,
           tenantId: dto.tenantId,
-          unitId: tenant.unitId,
+          unitId: activeLease.unitId,
           invoiceNumber,
           amount: dto.amount,
           dueDate: new Date(dto.paymentDate),
@@ -145,6 +143,11 @@ export class PaymentsService {
       ? `${building.address}${building.city ? ', ' + building.city : ''}${building.country ? ', ' + building.country : ''}`
       : undefined;
 
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: activeLease.unitId },
+      select: { unitNumber: true },
+    });
+
     const pdfDoc = this.pdfService.generatePaymentInvoice({
       invoiceNumber,
       date: payment!.paymentDate,
@@ -154,7 +157,7 @@ export class PaymentsService {
       tenantEmail: payment!.tenant.email,
       items: [
         {
-          description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${payment!.unit?.unitNumber || 'N/A'}`,
+          description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${unit?.unitNumber || 'N/A'}`,
           amount: Number(payment!.amount),
         },
       ],

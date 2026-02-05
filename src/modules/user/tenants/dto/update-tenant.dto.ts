@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEmail, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { TenantStatus } from 'generated/prisma/enums';
 
 export class UpdateTenantDto {
@@ -17,14 +17,6 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   phone?: string;
-
-  @ApiProperty({
-    example: '123e4567-e89b-12d3-a456-426614174006',
-    required: false,
-  })
-  @IsOptional()
-  @IsUUID()
-  unitId?: string;
 
   @ApiProperty({
     enum: TenantStatus,

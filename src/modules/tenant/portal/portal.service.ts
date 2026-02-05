@@ -27,14 +27,20 @@ export class PortalService {
             contactPhone: true,
           },
         },
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-            size: true,
-            type: true,
-            rentPrice: true,
+        leases: {
+          where: { status: 'active' },
+          take: 1,
+          include: {
+            unit: {
+              select: {
+                id: true,
+                unitNumber: true,
+                floor: true,
+                size: true,
+                type: true,
+                rentPrice: true,
+              },
+            },
           },
         },
       },
@@ -53,7 +59,6 @@ export class PortalService {
         phone: tenant.phone,
         status: tenant.status,
         building: tenant.building,
-        unit: tenant.unit,
       },
     };
   }
@@ -127,18 +132,23 @@ export class PortalService {
   ) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { buildingId: true, unitId: true },
+      select: { buildingId: true, name: true },
     });
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
 
+    const activeLease = await this.prisma.lease.findFirst({
+      where: { tenantId, status: 'active' },
+      select: { unitId: true },
+    });
+
     const request = await this.prisma.maintenanceRequest.create({
       data: {
         buildingId: tenant.buildingId,
         tenantId,
-        unitId: tenant.unitId,
+        unitId: activeLease?.unitId,
         title: dto.title,
         description: dto.description,
         priority: dto.priority || 'medium',
@@ -155,17 +165,12 @@ export class PortalService {
       },
     });
 
-    const tenantData = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true },
-    });
-
     const building = await this.prisma.building.findUnique({
       where: { id: tenant.buildingId },
       select: { userId: true },
     });
 
-    if (building && tenantData) {
+    if (building) {
       const owner = await this.prisma.user.findUnique({
         where: { id: building.userId },
         select: { name: true, email: true },
@@ -175,7 +180,7 @@ export class PortalService {
         await this.emailService.sendMaintenanceRequestCreatedEmail(
           owner.email,
           owner.name,
-          tenantData.name,
+          tenant.name,
           request.unit?.unitNumber || 'N/A',
           request.title,
           request.priority,
@@ -186,7 +191,7 @@ export class PortalService {
           userType: 'user',
           type: 'maintenance_request_created',
           title: 'New Maintenance Request',
-          message: `${tenantData.name} submitted: ${request.title}`,
+          message: `${tenant.name} submitted: ${request.title}`,
           link: `/dashboard/maintenance?building=${tenant.buildingId}`,
         });
       }

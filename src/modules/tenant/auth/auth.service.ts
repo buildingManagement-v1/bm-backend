@@ -26,13 +26,6 @@ export class TenantAuthService {
             name: true,
           },
         },
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
       },
     });
 
@@ -70,7 +63,6 @@ export class TenantAuthService {
       role: 'tenant',
       type: 'tenant',
       buildingId: tenant.buildingId,
-      unitId: tenant.unitId,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -84,7 +76,6 @@ export class TenantAuthService {
         name: tenant.name,
         email: tenant.email,
         building: tenant.building,
-        unit: tenant.unit,
       },
       mustResetPassword: tenant.mustResetPassword,
     };
@@ -165,7 +156,6 @@ export class TenantAuthService {
         role: 'tenant',
         type: 'tenant',
         buildingId: tenant.buildingId,
-        unitId: tenant.unitId,
       };
 
       const accessToken = this.jwtService.sign(newPayload, {

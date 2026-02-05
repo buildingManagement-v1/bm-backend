@@ -46,10 +46,14 @@ export class MaintenanceRequestsService {
         throw new NotFoundException('Tenant not found in this building');
       }
 
+      const activeLease = await this.prisma.lease.findFirst({
+        where: { tenantId: dto.tenantId, status: 'active' },
+        select: { unitId: true },
+      });
+
       tenantId = dto.tenantId;
-      unitId = tenant.unitId || undefined;
+      unitId = activeLease?.unitId || undefined;
     } else {
-      // User IS a tenant - use their ID
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: userId, buildingId },
       });
@@ -58,8 +62,13 @@ export class MaintenanceRequestsService {
         throw new NotFoundException('Tenant not found');
       }
 
+      const activeLease = await this.prisma.lease.findFirst({
+        where: { tenantId: userId, status: 'active' },
+        select: { unitId: true },
+      });
+
       tenantId = userId;
-      unitId = tenant.unitId || undefined;
+      unitId = activeLease?.unitId || undefined;
     }
 
     const request = await this.prisma.maintenanceRequest.create({

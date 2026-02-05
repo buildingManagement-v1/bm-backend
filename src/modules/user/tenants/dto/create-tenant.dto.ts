@@ -1,13 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEmail, IsOptional, IsUUID, IsEnum } from 'class-validator';
-import { TenantStatus } from 'generated/prisma/enums';
+import { IsString, IsEmail, IsOptional, MinLength } from 'class-validator';
 
 export class CreateTenantDto {
-  @ApiProperty({ example: 'Alice Smith' })
+  @ApiProperty({ example: 'John Doe' })
   @IsString()
   name: string;
 
-  @ApiProperty({ example: 'alice@example.com' })
+  @ApiProperty({ example: 'john@example.com' })
   @IsEmail()
   email: string;
 
@@ -16,25 +15,8 @@ export class CreateTenantDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({
-    example: '123e4567-e89b-12d3-a456-426614174006',
-    required: false,
-  })
-  @IsOptional()
-  @IsUUID()
-  unitId?: string;
-
-  @ApiProperty({
-    enum: TenantStatus,
-    example: TenantStatus['active'],
-    required: false,
-  })
-  @IsOptional()
-  @IsEnum(TenantStatus as object)
-  status?: TenantStatus;
-
-  @ApiProperty({ example: 'Password123!', required: false })
-  @IsOptional()
+  @ApiProperty({ example: 'password123' })
   @IsString()
-  password?: string;
+  @MinLength(6, { message: 'Password must be at least 6 characters' })
+  password: string;
 }

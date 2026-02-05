@@ -214,7 +214,6 @@ model Unit {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  tenants              Tenant[]
   leases               Lease[]
   maintenanceRequests  MaintenanceRequest[]
   payments             Payment[]
@@ -236,12 +235,11 @@ enum TenantStatus {
 model Tenant {
   id                           String        @id @default(uuid())
   buildingId                   String        @map("building_id")
-  unitId                       String?       @map("unit_id")
   name                         String
   email                        String        @unique
   phone                        String?
   passwordHash                 String?       @map("password_hash")
-  status                       TenantStatus  @default(active)
+  status                       TenantStatus  @default(inactive)
   mustResetPassword            Boolean       @default(false) @map("must_reset_password")
   passwordChangedAt            DateTime?     @map("password_changed_at")
   lastLoginAt                  DateTime?     @map("last_login_at")
@@ -249,14 +247,12 @@ model Tenant {
   updatedAt                    DateTime      @updatedAt @map("updated_at")
 
   building                     Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  unit                         Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
   leases                       Lease[]
   invoices                     Invoice[] 
   maintenanceRequests          MaintenanceRequest[]
   payments                     Payment[]
 
   @@index([buildingId])
-  @@index([unitId])
   @@map("tenants")
 }
 
