@@ -11,6 +11,7 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from 'src/common/email/email.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 @Injectable()
 export class TenantsService {
@@ -86,13 +87,18 @@ export class TenantsService {
     };
   }
 
-  async findAll(buildingId: string) {
-    const tenants = await this.prisma.tenant.findMany({
-      where: { buildingId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return tenants.map((tenant) => ({
+  async findAll(buildingId: string, limit = 20, offset = 0) {
+    const where = { buildingId };
+    const [totalCount, tenants] = await Promise.all([
+      this.prisma.tenant.count({ where }),
+      this.prisma.tenant.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const data = tenants.map((tenant) => ({
       id: tenant.id,
       buildingId: tenant.buildingId,
       name: tenant.name,
@@ -102,6 +108,8 @@ export class TenantsService {
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     }));
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findOne(id: string, buildingId: string) {

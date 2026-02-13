@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -60,16 +61,25 @@ export class TenantsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
-  @ApiOperation({ summary: 'Get all tenants' })
-  @ApiResponse({ status: 200, description: 'Return all tenants' })
+  @ApiOperation({ summary: 'Get all tenants (paginated)' })
+  @ApiResponse({ status: 200, description: 'Return paginated tenants' })
   async findAll(
     @User() user: { id: string },
     @BuildingId() buildingId: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    const result = await this.tenantsService.findAll(buildingId);
+    const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum: number = Math.max(0, Number(offset) || 0);
+    const result = await this.tenantsService.findAll(
+      buildingId,
+      limitNum,
+      offsetNum,
+    );
     return {
       success: true,
-      data: result,
+      data: result.data,
+      meta: result.meta,
     };
   }
 
