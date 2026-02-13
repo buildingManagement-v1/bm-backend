@@ -217,9 +217,8 @@ export class PaymentsService {
         leases: {
           where: { status: 'active' },
           include: {
-            paymentPeriods: {
-              orderBy: { month: 'asc' },
-            },
+            unit: { select: { id: true, unitNumber: true, floor: true } },
+            paymentPeriods: { orderBy: { month: 'asc' } },
           },
         },
       },
@@ -231,6 +230,9 @@ export class PaymentsService {
 
     return tenant.leases.map((lease) => ({
       leaseId: lease.id,
+      unitId: lease.unitId,
+      unitNumber: lease.unit.unitNumber,
+      unitFloor: lease.unit.floor ?? undefined,
       startDate: lease.startDate,
       endDate: lease.endDate,
       rentAmount: lease.rentAmount,
