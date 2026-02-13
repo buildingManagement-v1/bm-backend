@@ -52,6 +52,20 @@ export class BuildingsController {
     };
   }
 
+  @Get('options')
+  @ApiOperation({ summary: 'Get building options (id, name) for dropdowns' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return active buildings id and name',
+  })
+  async findOptions(@User() user: { id: string; role: string }) {
+    const result = await this.buildingsService.findOptions(user.id, user.role);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get building by ID' })
   @ApiResponse({ status: 200, description: 'Return building details' })

@@ -63,6 +63,33 @@ export class BuildingsService {
     return buildings;
   }
 
+  /** Lightweight list for dropdowns: id and name only, active buildings */
+  async findOptions(userId: string, userRole: string) {
+    if (userRole === 'manager') {
+      const assignments = await this.prisma.managerBuildingRole.findMany({
+        where: { managerId: userId },
+        include: {
+          building: {
+            select: { id: true, name: true, status: true },
+          },
+        },
+        orderBy: { building: { createdAt: 'desc' } },
+      });
+      return assignments
+        .filter(
+          (a): a is typeof a & { building: NonNullable<typeof a.building> } =>
+            a.building != null && a.building.status === 'active',
+        )
+        .map((a) => ({ id: a.building.id, name: a.building.name }));
+    }
+    const buildings = await this.prisma.building.findMany({
+      where: { userId, status: 'active' },
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return buildings;
+  }
+
   async findOne(userId: string, buildingId: string, userRole: string) {
     const building = await this.prisma.building.findUnique({
       where: { id: buildingId },
