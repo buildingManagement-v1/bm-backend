@@ -5,6 +5,7 @@ import {
   ActivityEntityType,
   Prisma,
 } from 'generated/prisma/client';
+import { buildPageInfo } from 'src/common/pagination';
 
 interface CreateActivityLogDto {
   action: ActivityAction;
@@ -65,7 +66,12 @@ export class ActivityLogsService {
     });
   }
 
-  async findAll(buildingId: string, filters?: FindAllFilters) {
+  async findAll(
+    buildingId: string,
+    filters?: FindAllFilters,
+    limit = 20,
+    offset = 0,
+  ) {
     const where: {
       buildingId: string;
       createdAt?: { gte?: Date; lte?: Date };
@@ -82,11 +88,17 @@ export class ActivityLogsService {
     if (filters?.entityType) where.entityType = filters.entityType;
     if (filters?.action) where.action = filters.action;
 
-    return await this.prisma.activityLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+    const [totalCount, data] = await Promise.all([
+      this.prisma.activityLog.count({ where }),
+      this.prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findAllPlatform(filters?: FindAllFilters) {

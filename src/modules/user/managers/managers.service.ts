@@ -12,6 +12,7 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import { EmailService } from 'src/common/email/email.service';
 import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 @Injectable()
 export class ManagersService {
@@ -122,25 +123,30 @@ export class ManagersService {
     };
   }
 
-  async findAll(userId: string) {
-    const managers = await this.prisma.manager.findMany({
-      where: { userId },
-      include: {
-        buildingRoles: {
-          include: {
-            building: {
-              select: {
-                id: true,
-                name: true,
+  async findAll(userId: string, limit = 20, offset = 0) {
+    const where = { userId };
+    const [totalCount, managers] = await Promise.all([
+      this.prisma.manager.count({ where }),
+      this.prisma.manager.findMany({
+        where,
+        include: {
+          buildingRoles: {
+            include: {
+              building: {
+                select: {
+                  id: true,
+                  name: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return managers.map((manager) => ({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const data = managers.map((manager) => ({
       id: manager.id,
       name: manager.name,
       email: manager.email,
@@ -154,6 +160,8 @@ export class ManagersService {
         roles: br.roles,
       })),
     }));
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findOne(userId: string, managerId: string) {

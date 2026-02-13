@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateNotificationDto, QueryNotificationsDto } from './dto';
 import { UserType } from 'generated/prisma/client';
+import { buildPageInfo } from '../pagination';
 
 @Injectable()
 export class NotificationsService {
@@ -19,7 +20,7 @@ export class NotificationsService {
     query: QueryNotificationsDto,
   ) {
     const { page = 1, limit = 20, isRead } = query;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     const where = {
       userId,
@@ -27,23 +28,18 @@ export class NotificationsService {
       ...(isRead !== undefined && { isRead }),
     };
 
-    const [data, total] = await Promise.all([
+    const [totalCount, data] = await Promise.all([
+      this.prisma.notification.count({ where }),
       this.prisma.notification.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip,
+        skip: offset,
         take: limit,
       }),
-      this.prisma.notification.count({ where }),
     ]);
 
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async getUnreadCount(userId: string, userType: UserType) {

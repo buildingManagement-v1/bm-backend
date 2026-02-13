@@ -35,19 +35,29 @@ export class ActivityLogsController {
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'entityType', required: false, enum: ActivityEntityType })
   @ApiQuery({ name: 'action', required: false, enum: ActivityAction })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
   async findAll(
     @BuildingId() buildingId: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('entityType') entityType?: ActivityEntityType,
     @Query('action') action?: ActivityAction,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    const result = await this.activityLogsService.findAll(buildingId, {
-      startDate,
-      endDate,
-      entityType,
-      action,
-    });
-    return { success: true, data: result };
+    const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum: number = Math.max(0, Number(offset) || 0);
+    const result = await this.activityLogsService.findAll(
+      buildingId,
+      { startDate, endDate, entityType, action },
+      limitNum,
+      offsetNum,
+    );
+    return {
+      success: true,
+      data: result.data,
+      meta: result.meta,
+    };
   }
 }

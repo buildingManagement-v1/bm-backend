@@ -33,7 +33,16 @@ export class NotificationsController {
     @Query() query: QueryNotificationsDto,
   ) {
     const userType = this.mapUserType(user.type, user.role);
-    return await this.notificationsService.findAll(user.id, userType, query);
+    const result = await this.notificationsService.findAll(
+      user.id,
+      userType,
+      query,
+    );
+    return {
+      success: true,
+      data: result.data,
+      meta: result.meta,
+    };
   }
 
   @Get('unread-count')

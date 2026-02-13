@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { PdfService } from 'src/common/pdf/pdf.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 const invoiceInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -18,12 +19,20 @@ export class InvoicesService {
     private pdfService: PdfService,
   ) {}
 
-  async findAll(buildingId: string) {
-    return await this.prisma.invoice.findMany({
-      where: { buildingId },
-      include: invoiceInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(buildingId: string, limit = 20, offset = 0) {
+    const where = { buildingId };
+    const [totalCount, data] = await Promise.all([
+      this.prisma.invoice.count({ where }),
+      this.prisma.invoice.findMany({
+        where,
+        include: invoiceInclude,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findOne(id: string, buildingId: string) {
