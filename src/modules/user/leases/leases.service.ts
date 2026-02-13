@@ -80,7 +80,7 @@ export class LeasesService {
           startDate: new Date(dto.startDate),
           endDate: new Date(dto.endDate),
           rentAmount: dto.rentAmount,
-          securityDeposit: dto.securityDeposit,
+          securityDeposit: dto.securityDeposit ?? undefined,
           status: dto.status || 'active',
           terms: dto.terms as Prisma.InputJsonValue,
         },
