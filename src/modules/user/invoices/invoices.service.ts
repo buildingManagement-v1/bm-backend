@@ -19,8 +19,30 @@ export class InvoicesService {
     private pdfService: PdfService,
   ) {}
 
-  async findAll(buildingId: string, limit = 20, offset = 0) {
-    const where = { buildingId };
+  async findAll(
+    buildingId: string,
+    limit = 20,
+    offset = 0,
+    filters?: { status?: string; q?: string },
+  ) {
+    const where: Prisma.InvoiceWhereInput = { buildingId };
+    if (
+      filters?.status &&
+      ['draft', 'sent', 'paid', 'overdue', 'cancelled'].includes(filters.status)
+    ) {
+      where.status = filters.status as
+        | 'draft'
+        | 'sent'
+        | 'paid'
+        | 'overdue'
+        | 'cancelled';
+    }
+    if (filters?.q?.trim()) {
+      where.invoiceNumber = {
+        contains: filters.q.trim(),
+        mode: 'insensitive',
+      };
+    }
     const [totalCount, data] = await Promise.all([
       this.prisma.invoice.count({ where }),
       this.prisma.invoice.findMany({

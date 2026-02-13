@@ -68,6 +68,8 @@ export class TenantsController {
     @BuildingId() buildingId: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('status') status?: string,
+    @Query('q') q?: string,
   ) {
     const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
     const offsetNum: number = Math.max(0, Number(offset) || 0);
@@ -75,6 +77,7 @@ export class TenantsController {
       buildingId,
       limitNum,
       offsetNum,
+      { status, q },
     );
     return {
       success: true,

@@ -158,12 +158,40 @@ export class MaintenanceRequestsService {
     userRole?: string,
     limit = 20,
     offset = 0,
+    filters?: { status?: string; priority?: string; q?: string },
   ) {
     const whereClause: Prisma.MaintenanceRequestWhereInput = {
       buildingId,
       ...(userRole !== 'manager' &&
         userRole !== 'owner' && { tenantId: userId }),
     };
+    if (
+      filters?.status &&
+      ['pending', 'in_progress', 'completed', 'cancelled'].includes(
+        filters.status,
+      )
+    ) {
+      whereClause.status = filters.status as
+        | 'pending'
+        | 'in_progress'
+        | 'completed'
+        | 'cancelled';
+    }
+    if (
+      filters?.priority &&
+      ['low', 'medium', 'high', 'urgent'].includes(filters.priority)
+    ) {
+      whereClause.priority = filters.priority as
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'urgent';
+    }
+    if (filters?.q?.trim()) {
+      whereClause.tenant = {
+        name: { contains: filters.q.trim(), mode: 'insensitive' },
+      };
+    }
 
     const [totalCount, data] = await Promise.all([
       this.prisma.maintenanceRequest.count({ where: whereClause }),

@@ -73,6 +73,9 @@ export class MaintenanceRequestsController {
     @BuildingId() buildingId: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('q') q?: string,
   ) {
     const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
     const offsetNum: number = Math.max(0, Number(offset) || 0);
@@ -82,6 +85,7 @@ export class MaintenanceRequestsController {
       user.role,
       limitNum,
       offsetNum,
+      { status, priority, q },
     );
     return {
       success: true,

@@ -77,8 +77,22 @@ export class UnitsService {
     return unit;
   }
 
-  async findAll(buildingId: string, limit = 20, offset = 0) {
-    const where = { buildingId };
+  async findAll(
+    buildingId: string,
+    limit = 20,
+    offset = 0,
+    filters?: { status?: string; q?: string },
+  ) {
+    const where: Prisma.UnitWhereInput = { buildingId };
+    if (
+      filters?.status &&
+      ['vacant', 'occupied', 'inactive'].includes(filters.status)
+    ) {
+      where.status = filters.status as 'vacant' | 'occupied' | 'inactive';
+    }
+    if (filters?.q?.trim()) {
+      where.unitNumber = { contains: filters.q.trim(), mode: 'insensitive' };
+    }
     const [totalCount, data] = await Promise.all([
       this.prisma.unit.count({ where }),
       this._findManyUnits(where, limit, offset),
@@ -88,7 +102,7 @@ export class UnitsService {
   }
 
   private async _findManyUnits(
-    where: { buildingId: string },
+    where: Prisma.UnitWhereInput,
     limit: number,
     offset: number,
   ) {

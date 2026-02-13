@@ -87,8 +87,23 @@ export class TenantsService {
     };
   }
 
-  async findAll(buildingId: string, limit = 20, offset = 0) {
-    const where = { buildingId };
+  async findAll(
+    buildingId: string,
+    limit = 20,
+    offset = 0,
+    filters?: { status?: string; q?: string },
+  ) {
+    const where: Prisma.TenantWhereInput = { buildingId };
+    if (filters?.status && ['active', 'inactive'].includes(filters.status)) {
+      where.status = filters.status as 'active' | 'inactive';
+    }
+    if (filters?.q?.trim()) {
+      const q = filters.q.trim();
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+    }
     const [totalCount, tenants] = await Promise.all([
       this.prisma.tenant.count({ where }),
       this.prisma.tenant.findMany({

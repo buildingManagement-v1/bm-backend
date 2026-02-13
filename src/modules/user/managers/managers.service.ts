@@ -123,8 +123,23 @@ export class ManagersService {
     };
   }
 
-  async findAll(userId: string, limit = 20, offset = 0) {
-    const where = { userId };
+  async findAll(
+    userId: string,
+    limit = 20,
+    offset = 0,
+    filters?: { status?: string; q?: string },
+  ) {
+    const where: Prisma.ManagerWhereInput = { userId };
+    if (filters?.status && ['active', 'inactive'].includes(filters.status)) {
+      where.status = filters.status as 'active' | 'inactive';
+    }
+    if (filters?.q?.trim()) {
+      const q = filters.q.trim();
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+    }
     const [totalCount, managers] = await Promise.all([
       this.prisma.manager.count({ where }),
       this.prisma.manager.findMany({

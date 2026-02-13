@@ -187,8 +187,34 @@ export class PaymentsService {
     return payment!;
   }
 
-  async findAll(buildingId: string, limit = 20, offset = 0) {
-    const where = { buildingId };
+  async findAll(
+    buildingId: string,
+    limit = 20,
+    offset = 0,
+    filters?: { type?: string; status?: string; q?: string },
+  ) {
+    const where: Prisma.PaymentWhereInput = { buildingId };
+    if (
+      filters?.type &&
+      ['rent', 'utility', 'deposit', 'other'].includes(filters.type)
+    ) {
+      where.type = filters.type as 'rent' | 'utility' | 'deposit' | 'other';
+    }
+    if (
+      filters?.status &&
+      ['pending', 'completed', 'failed', 'cancelled'].includes(filters.status)
+    ) {
+      where.status = filters.status as
+        | 'pending'
+        | 'completed'
+        | 'failed'
+        | 'cancelled';
+    }
+    if (filters?.q?.trim()) {
+      where.tenant = {
+        name: { contains: filters.q.trim(), mode: 'insensitive' },
+      };
+    }
     const [totalCount, data] = await Promise.all([
       this.prisma.payment.count({ where }),
       this.prisma.payment.findMany({
