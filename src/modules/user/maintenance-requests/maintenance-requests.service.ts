@@ -13,6 +13,7 @@ import {
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 @Injectable()
 export class MaintenanceRequestsService {
@@ -151,35 +152,46 @@ export class MaintenanceRequestsService {
     return request;
   }
 
-  async findAll(buildingId: string, userId: string, userRole?: string) {
+  async findAll(
+    buildingId: string,
+    userId: string,
+    userRole?: string,
+    limit = 20,
+    offset = 0,
+  ) {
     const whereClause: Prisma.MaintenanceRequestWhereInput = {
       buildingId,
       ...(userRole !== 'manager' &&
         userRole !== 'owner' && { tenantId: userId }),
     };
 
-    const requests = await this.prisma.maintenanceRequest.findMany({
-      where: whereClause,
-      include: {
-        tenant: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    const [totalCount, data] = await Promise.all([
+      this.prisma.maintenanceRequest.count({ where: whereClause }),
+      this.prisma.maintenanceRequest.findMany({
+        where: whereClause,
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          unit: {
+            select: {
+              id: true,
+              unitNumber: true,
+              floor: true,
+            },
           },
         },
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return requests;
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findOne(

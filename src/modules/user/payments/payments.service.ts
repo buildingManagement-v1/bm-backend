@@ -9,6 +9,7 @@ import { CreatePaymentDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { PdfService } from 'src/common/pdf/pdf.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -186,12 +187,20 @@ export class PaymentsService {
     return payment!;
   }
 
-  async findAll(buildingId: string) {
-    return await this.prisma.payment.findMany({
-      where: { buildingId },
-      include: paymentInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(buildingId: string, limit = 20, offset = 0) {
+    const where = { buildingId };
+    const [totalCount, data] = await Promise.all([
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.findMany({
+        where,
+        include: paymentInclude,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
   }
 
   async findOne(id: string, buildingId: string) {

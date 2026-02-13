@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -49,13 +57,24 @@ export class PaymentsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.payment_manager)
-  @ApiOperation({ summary: 'Get all payments' })
-  @ApiResponse({ status: 200, description: 'Return all payments' })
-  async findAll(@BuildingId() buildingId: string) {
-    const result = await this.paymentsService.findAll(buildingId);
+  @ApiOperation({ summary: 'Get all payments (paginated)' })
+  @ApiResponse({ status: 200, description: 'Return paginated payments' })
+  async findAll(
+    @BuildingId() buildingId: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum: number = Math.max(0, Number(offset) || 0);
+    const result = await this.paymentsService.findAll(
+      buildingId,
+      limitNum,
+      offsetNum,
+    );
     return {
       success: true,
-      data: result,
+      data: result.data,
+      meta: result.meta,
     };
   }
 
