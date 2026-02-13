@@ -8,6 +8,7 @@ import { CreateUnitDto, UpdateUnitDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 @Injectable()
 export class UnitsService {
@@ -76,9 +77,23 @@ export class UnitsService {
     return unit;
   }
 
-  async findAll(buildingId: string) {
-    const units = await this.prisma.unit.findMany({
-      where: { buildingId },
+  async findAll(buildingId: string, limit = 20, offset = 0) {
+    const where = { buildingId };
+    const [totalCount, data] = await Promise.all([
+      this.prisma.unit.count({ where }),
+      this._findManyUnits(where, limit, offset),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { data, meta: { page_info } };
+  }
+
+  private async _findManyUnits(
+    where: { buildingId: string },
+    limit: number,
+    offset: number,
+  ) {
+    return this.prisma.unit.findMany({
+      where,
       include: {
         building: {
           select: {
@@ -88,9 +103,9 @@ export class UnitsService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     });
-
-    return units;
   }
 
   async findOne(buildingId: string, id: string) {

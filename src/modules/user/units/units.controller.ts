@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -58,13 +59,24 @@ export class UnitsController {
   @Get()
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
-  @ApiOperation({ summary: 'Get all units' })
-  @ApiResponse({ status: 200, description: 'Return all units' })
-  async findAll(@BuildingId() buildingId: string) {
-    const result = await this.unitsService.findAll(buildingId);
+  @ApiOperation({ summary: 'Get all units (paginated)' })
+  @ApiResponse({ status: 200, description: 'Return paginated units' })
+  async findAll(
+    @BuildingId() buildingId: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const limitNum: number = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum: number = Math.max(0, Number(offset) || 0);
+    const result = await this.unitsService.findAll(
+      buildingId,
+      limitNum,
+      offsetNum,
+    );
     return {
       success: true,
-      data: result,
+      data: result.data,
+      meta: result.meta,
     };
   }
 
