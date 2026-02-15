@@ -1,4 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/platform-admin/auth/auth.module';
@@ -67,6 +72,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(BuildingContextMiddleware)
+      .exclude({ path: 'v1/app/reports/portfolio', method: RequestMethod.GET })
       .forRoutes(
         'v1/app/units',
         'v1/app/tenants',

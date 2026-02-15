@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Res } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -6,6 +6,7 @@ import {
   ApiResponse,
   ApiQuery,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { ReportsService } from './reports.service';
 import { ManagerRole } from 'generated/prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -22,13 +23,31 @@ import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get('summary')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Get owner summary (KPIs for reports dashboard)' })
+  @ApiResponse({ status: 200, description: 'Return summary for current month' })
+  async getSummary(@BuildingId() buildingId: string) {
+    const result = await this.reportsService.getSummary(buildingId);
+    return { success: true, data: result };
+  }
+
   @Get('occupancy')
   @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
-  @ApiOperation({ summary: 'Get occupancy report' })
+  @ApiOperation({ summary: 'Get occupancy report (v2: trend, lost rent)' })
   @ApiResponse({ status: 200, description: 'Return occupancy report' })
-  async getOccupancy(@BuildingId() buildingId: string) {
-    const result = await this.reportsService.getOccupancy(buildingId);
+  @ApiQuery({ name: 'historyMonths', required: false, type: Number })
+  async getOccupancy(
+    @BuildingId() buildingId: string,
+    @Query('historyMonths') historyMonths?: string,
+  ) {
+    const months = historyMonths ? parseInt(historyMonths, 10) : 6;
+    const result = await this.reportsService.getOccupancy(
+      buildingId,
+      isNaN(months) ? 6 : months,
+    );
     return { success: true, data: result };
   }
 
@@ -60,5 +79,36 @@ export class ReportsController {
   async getTenants(@BuildingId() buildingId: string) {
     const result = await this.reportsService.getTenants(buildingId);
     return { success: true, data: result };
+  }
+
+  @Get('maintenance')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Get maintenance report summary' })
+  @ApiResponse({ status: 200, description: 'Return maintenance summary' })
+  async getMaintenance(@BuildingId() buildingId: string) {
+    const result = await this.reportsService.getMaintenance(buildingId);
+    return { success: true, data: result };
+  }
+
+  @Get('export')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.reports_viewer)
+  @ApiOperation({ summary: 'Export report as CSV' })
+  @ApiQuery({
+    name: 'report',
+    required: true,
+    enum: ['outstanding', 'expirations', 'vacant'],
+  })
+  async getExport(
+    @BuildingId() buildingId: string,
+    @Query('report') report: 'outstanding' | 'expirations' | 'vacant',
+    @Res() res: Response,
+  ) {
+    const csv = await this.reportsService.getExportCsv(buildingId, report);
+    const filename = `report-${report}-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   }
 }

@@ -59,7 +59,7 @@ export class DashboardService {
     const upcomingPeriods = await this.prisma.paymentPeriod.findMany({
       where: {
         lease: { buildingId },
-        status: 'unpaid',
+        status: { in: ['unpaid', 'overdue'] },
         month: { in: [currentMonth, nextMonth] },
       },
       include: {
