@@ -67,7 +67,7 @@ export class ReportsService {
       this.prisma.paymentPeriod
         .aggregate({
           where: {
-            lease: { buildingId },
+            lease: { buildingId, status: 'active' },
             status: { in: ['unpaid', 'overdue'] },
           },
           _sum: { rentAmount: true },
@@ -324,7 +324,7 @@ export class ReportsService {
         }),
         this.prisma.paymentPeriod.findMany({
           where: {
-            lease: { buildingId },
+            lease: { buildingId, status: 'active' },
             status: { in: ['unpaid', 'overdue'] },
           },
           include: {

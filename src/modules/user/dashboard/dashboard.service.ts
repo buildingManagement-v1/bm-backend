@@ -58,7 +58,7 @@ export class DashboardService {
 
     const upcomingPeriods = await this.prisma.paymentPeriod.findMany({
       where: {
-        lease: { buildingId },
+        lease: { buildingId, status: 'active' },
         status: { in: ['unpaid', 'overdue'] },
         month: { in: [currentMonth, nextMonth] },
       },
@@ -84,14 +84,38 @@ export class DashboardService {
       orderBy: { month: 'asc' },
     });
 
-    return upcomingPeriods.map((period) => ({
-      tenantId: period.lease.tenant.id,
-      tenantName: period.lease.tenant.name,
-      tenantEmail: period.lease.tenant.email,
-      unit: period.lease.unit,
-      month: period.month,
-      amount: Number(period.rentAmount),
-      status: period.status,
-    }));
+    // Group by tenant + unit (one row per tenant-unit, multiple months)
+    const grouped = new Map<
+      string,
+      {
+        tenantId: string;
+        tenantName: string;
+        tenantEmail: string;
+        unit: { id: string; unitNumber: string };
+        months: string[];
+        totalAmount: number;
+      }
+    >();
+    for (const period of upcomingPeriods) {
+      const key = `${period.lease.tenant.id}:${period.lease.unit.id}`;
+      const amount = Number(period.rentAmount);
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, {
+          tenantId: period.lease.tenant.id,
+          tenantName: period.lease.tenant.name,
+          tenantEmail: period.lease.tenant.email,
+          unit: period.lease.unit,
+          months: [period.month],
+          totalAmount: amount,
+        });
+      } else {
+        existing.months.push(period.month);
+        existing.totalAmount += amount;
+      }
+    }
+    return Array.from(grouped.values()).sort((a, b) =>
+      a.months[0].localeCompare(b.months[0]),
+    );
   }
 }
