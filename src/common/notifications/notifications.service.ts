@@ -19,8 +19,7 @@ export class NotificationsService {
     userType: UserType,
     query: QueryNotificationsDto,
   ) {
-    const { page = 1, limit = 20, isRead } = query;
-    const offset = (page - 1) * limit;
+    const { limit = 20, offset = 0, isRead } = query;
 
     const where = {
       userId,
