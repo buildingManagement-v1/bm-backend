@@ -193,6 +193,7 @@ enum UnitType {
   office
   storage
   restaurant
+  guest_house
   other
 }
 
