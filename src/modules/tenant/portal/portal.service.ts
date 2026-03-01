@@ -73,6 +73,29 @@ export class PortalService {
     };
   }
 
+  async updateProfile(tenantId: string, body: { email?: string }) {
+    if (body.email !== undefined) {
+      const existing = await this.prisma.tenant.findUnique({
+        where: { email: body.email },
+      });
+      if (existing && existing.id !== tenantId) {
+        throw new BadRequestException('Email already in use');
+      }
+    }
+    const tenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        ...(body.email !== undefined && { email: body.email }),
+      },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+    return {
+      success: true,
+      data: tenant,
+      message: 'Profile updated successfully',
+    };
+  }
+
   async getRentStatus(tenantId: string) {
     const leases = await this.prisma.lease.findMany({
       where: {

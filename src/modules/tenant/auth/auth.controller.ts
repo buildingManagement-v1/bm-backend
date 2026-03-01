@@ -1,8 +1,20 @@
-import { Controller, Post, Body, Res, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Res, Req, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import type { Response, Request } from 'express';
 import { TenantAuthService } from './auth.service';
-import { TenantLoginDto, RequestOtpDto, ResetPasswordDto } from './dto';
+import {
+  TenantLoginDto,
+  RequestOtpDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+} from './dto';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { User } from '../../../common/decorators/user.decorator';
 
 interface RequestWithCookies extends Request {
   cookies: {
@@ -54,6 +66,22 @@ export class TenantAuthController {
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     const result = await this.authService.resetPassword(dto);
+    return {
+      success: true,
+      message: result.message,
+    };
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  async changePassword(
+    @User() user: { id: string },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    const result = await this.authService.changePassword(user.id, dto);
     return {
       success: true,
       message: result.message,

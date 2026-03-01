@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -38,6 +39,16 @@ export class PortalController {
   @ApiResponse({ status: 200, description: 'Return tenant profile' })
   async getProfile(@User() user: { id: string }) {
     return await this.portalService.getProfile(user.id);
+  }
+
+  @Patch('profile')
+  @ApiOperation({ summary: 'Update tenant profile (email)' })
+  @ApiResponse({ status: 200, description: 'Profile updated' })
+  async updateProfile(
+    @User() user: { id: string },
+    @Body() body: { email?: string },
+  ) {
+    return await this.portalService.updateProfile(user.id, body);
   }
 
   @Get('rent-status')

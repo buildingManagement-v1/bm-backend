@@ -1,7 +1,12 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { TenantLoginDto, RequestOtpDto, ResetPasswordDto } from './dto';
+import {
+  TenantLoginDto,
+  RequestOtpDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+} from './dto';
 import { TokenService } from '../../../common/token/token.service';
 import { EmailService } from '../../../common/email/email.service';
 import { OtpType, UserType } from 'generated/prisma/client';
@@ -129,6 +134,44 @@ export class TenantAuthService {
     });
 
     return { message: 'Password reset successfully' };
+  }
+
+  async changePassword(tenantId: string, dto: ChangePasswordDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new UnauthorizedException('Tenant not found');
+    }
+
+    if (!tenant.passwordHash) {
+      throw new UnauthorizedException(
+        'Password not set. Use forgot password to set one.',
+      );
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      tenant.passwordHash,
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        passwordHash: hashedPassword,
+        mustResetPassword: false,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 
   async refresh(refreshToken: string) {

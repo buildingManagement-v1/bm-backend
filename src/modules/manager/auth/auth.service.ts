@@ -1,9 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   LoginManagerDto,
   ChangePasswordDto,
+  UpdateEmailDto,
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto';
@@ -121,6 +126,20 @@ export class AuthService {
     });
 
     return { message: 'Password changed successfully' };
+  }
+
+  async updateEmail(managerId: string, dto: UpdateEmailDto) {
+    const existing = await this.prisma.manager.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing && existing.id !== managerId) {
+      throw new ConflictException('Email already in use');
+    }
+    await this.prisma.manager.update({
+      where: { id: managerId },
+      data: { email: dto.email },
+    });
+    return { message: 'Email updated successfully', email: dto.email };
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {

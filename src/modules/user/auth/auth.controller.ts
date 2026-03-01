@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   HttpCode,
   HttpStatus,
@@ -19,6 +20,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  UpdateEmailDto,
 } from './dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { User } from 'src/common/decorators/user.decorator';
@@ -85,6 +87,19 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     const result = await this.authService.changePassword(user.id, dto);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update my email' })
+  @ApiResponse({ status: 200, description: 'Email updated successfully' })
+  async updateEmail(@User() user: { id: string }, @Body() dto: UpdateEmailDto) {
+    const result = await this.authService.updateEmail(user.id, dto);
     return {
       success: true,
       data: result,

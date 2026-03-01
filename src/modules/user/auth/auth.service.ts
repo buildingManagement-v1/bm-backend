@@ -12,6 +12,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  UpdateEmailDto,
 } from './dto';
 import * as bcrypt from 'bcrypt';
 import { TokenService } from 'src/common/token/token.service';
@@ -223,6 +224,20 @@ export class AuthService {
     });
 
     return { message: 'Password changed successfully' };
+  }
+
+  async updateEmail(userId: string, dto: UpdateEmailDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing && existing.id !== userId) {
+      throw new ConflictException('Email already in use');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { email: dto.email },
+    });
+    return { message: 'Email updated successfully', email: dto.email };
   }
 
   async refresh(refreshToken: string) {
