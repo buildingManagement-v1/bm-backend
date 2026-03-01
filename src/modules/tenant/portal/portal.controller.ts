@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -32,10 +40,20 @@ export class PortalController {
   }
 
   @Get('payment-history')
-  @ApiOperation({ summary: 'Get payment history' })
-  @ApiResponse({ status: 200, description: 'Return payment history' })
-  async getPaymentHistory(@User() user: { id: string }) {
-    return await this.portalService.getPaymentHistory(user.id);
+  @ApiOperation({ summary: 'Get payment history (paginated)' })
+  @ApiResponse({ status: 200, description: 'Return paginated payment history' })
+  async getPaymentHistory(
+    @User() user: { id: string },
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum = Math.max(0, Number(offset) || 0);
+    return await this.portalService.getPaymentHistory(
+      user.id,
+      limitNum,
+      offsetNum,
+    );
   }
 
   @Post('maintenance-requests')
@@ -49,10 +67,20 @@ export class PortalController {
   }
 
   @Get('maintenance-requests')
-  @ApiOperation({ summary: 'Get all maintenance requests' })
-  @ApiResponse({ status: 200, description: 'Return all maintenance requests' })
-  async getMaintenanceRequests(@User() user: { id: string }) {
-    return await this.portalService.getMaintenanceRequests(user.id);
+  @ApiOperation({ summary: 'Get maintenance requests (paginated)' })
+  @ApiResponse({ status: 200, description: 'Return paginated maintenance requests' })
+  async getMaintenanceRequests(
+    @User() user: { id: string },
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum = Math.max(0, Number(offset) || 0);
+    return await this.portalService.getMaintenanceRequests(
+      user.id,
+      limitNum,
+      offsetNum,
+    );
   }
 
   @Get('maintenance-requests/:id')

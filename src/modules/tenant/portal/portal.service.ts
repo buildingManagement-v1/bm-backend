@@ -3,6 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SubmitMaintenanceRequestDto } from './dto';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { EmailService } from 'src/common/email/email.service';
+import { buildPageInfo } from 'src/common/pagination';
 
 @Injectable()
 export class PortalService {
@@ -29,7 +30,7 @@ export class PortalService {
         },
         leases: {
           where: { status: 'active' },
-          take: 1,
+          orderBy: { startDate: 'desc' },
           include: {
             unit: {
               select: {
@@ -59,16 +60,18 @@ export class PortalService {
         phone: tenant.phone,
         status: tenant.status,
         building: tenant.building,
+        leases: tenant.leases,
       },
     };
   }
 
   async getRentStatus(tenantId: string) {
-    const lease = await this.prisma.lease.findFirst({
+    const leases = await this.prisma.lease.findMany({
       where: {
         tenantId,
         status: 'active',
       },
+      orderBy: { startDate: 'desc' },
       include: {
         unit: {
           select: {
@@ -79,50 +82,48 @@ export class PortalService {
           },
         },
         paymentPeriods: {
-          orderBy: {
-            month: 'desc',
-          },
+          orderBy: { month: 'desc' },
         },
       },
     });
 
-    if (!lease) {
-      return {
-        success: true,
-        data: null,
-        message: 'No active lease found',
-      };
-    }
-
     return {
       success: true,
-      data: lease,
+      data: leases,
     };
   }
 
-  async getPaymentHistory(tenantId: string) {
-    const payments = await this.prisma.payment.findMany({
-      where: { tenantId },
-      include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
+  async getPaymentHistory(tenantId: string, limit = 20, offset = 0) {
+    const where = { tenantId };
+    const [totalCount, data] = await Promise.all([
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.findMany({
+        where,
+        include: {
+          unit: {
+            select: {
+              id: true,
+              unitNumber: true,
+            },
+          },
+          invoice: {
+            select: {
+              id: true,
+              invoiceNumber: true,
+            },
           },
         },
-        invoice: {
-          select: {
-            id: true,
-            invoiceNumber: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
+    const page_info = buildPageInfo(limit, offset, totalCount);
     return {
       success: true,
-      data: payments,
+      data,
+      meta: { page_info },
     };
   }
 
@@ -204,24 +205,32 @@ export class PortalService {
     };
   }
 
-  async getMaintenanceRequests(tenantId: string) {
-    const requests = await this.prisma.maintenanceRequest.findMany({
-      where: { tenantId },
-      include: {
-        unit: {
-          select: {
-            id: true,
-            unitNumber: true,
-            floor: true,
+  async getMaintenanceRequests(tenantId: string, limit = 20, offset = 0) {
+    const where = { tenantId };
+    const [totalCount, data] = await Promise.all([
+      this.prisma.maintenanceRequest.count({ where }),
+      this.prisma.maintenanceRequest.findMany({
+        where,
+        include: {
+          unit: {
+            select: {
+              id: true,
+              unitNumber: true,
+              floor: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
 
+    const page_info = buildPageInfo(limit, offset, totalCount);
     return {
       success: true,
-      data: requests,
+      data,
+      meta: { page_info },
     };
   }
 
