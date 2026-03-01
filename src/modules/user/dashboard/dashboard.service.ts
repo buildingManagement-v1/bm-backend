@@ -118,4 +118,37 @@ export class DashboardService {
       a.months[0].localeCompare(b.months[0]),
     );
   }
+
+  /**
+   * Revenue by month for the last 6 months (for bar chart).
+   */
+  async getRevenueByMonth(buildingId: string, months = 6) {
+    const now = new Date();
+    const result: { month: string; label: string; revenue: number }[] = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+      const agg = await this.prisma.payment.aggregate({
+        where: {
+          buildingId,
+          status: 'completed',
+          paymentDate: { gte: firstDay, lte: lastDay },
+        },
+        _sum: { amount: true },
+      });
+
+      const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      result.push({
+        month: monthStr,
+        label,
+        revenue: Number(agg._sum.amount || 0),
+      });
+    }
+
+    return result;
+  }
 }

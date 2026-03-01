@@ -187,6 +187,14 @@ export class PortalController {
     return { success: true, data };
   }
 
+  @Get('dashboard-stats')
+  @ApiOperation({ summary: 'Get dashboard stats for charts (payment summary + recent months)' })
+  @ApiResponse({ status: 200, description: 'Return payment summary and recent months' })
+  async getDashboardStats(@User() user: { id: string }) {
+    const data = await this.portalService.getDashboardStats(user.id);
+    return { success: true, data };
+  }
+
   @Get('upcoming-payments')
   @ApiOperation({ summary: 'Get upcoming (unpaid/overdue) rent payments' })
   @ApiResponse({ status: 200, description: 'Return upcoming payments list' })

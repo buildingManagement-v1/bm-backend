@@ -33,4 +33,12 @@ export class DashboardController {
     const result = await this.dashboardService.getUpcomingPayments(buildingId);
     return { success: true, data: result };
   }
+
+  @Get('revenue-by-month')
+  @ApiOperation({ summary: 'Get revenue by month for charts (last 6 months)' })
+  @ApiResponse({ status: 200, description: 'Return revenue by month' })
+  async getRevenueByMonth(@BuildingId() buildingId: string) {
+    const result = await this.dashboardService.getRevenueByMonth(buildingId, 6);
+    return { success: true, data: result };
+  }
 }

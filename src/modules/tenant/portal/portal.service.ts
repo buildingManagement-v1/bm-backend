@@ -568,6 +568,64 @@ export class PortalService {
     });
   }
 
+  /**
+   * Dashboard stats for tenant: payment summary (paid/unpaid/overdue) and recent months for charts.
+   */
+  async getDashboardStats(tenantId: string) {
+    const periods = await this.prisma.paymentPeriod.findMany({
+      where: {
+        lease: {
+          tenantId,
+          status: 'active',
+        },
+      },
+      select: {
+        month: true,
+        rentAmount: true,
+        status: true,
+      },
+    });
+
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let overdueAmount = 0;
+    const byMonth = new Map<
+      string,
+      { due: number; paid: number }
+    >();
+
+    for (const p of periods) {
+      const amount = Number(p.rentAmount);
+      if (p.status === 'paid') {
+        paidAmount += amount;
+      } else if (p.status === 'overdue') {
+        overdueAmount += amount;
+      } else {
+        unpaidAmount += amount;
+      }
+      const existing = byMonth.get(p.month) ?? { due: 0, paid: 0 };
+      existing.due += amount;
+      if (p.status === 'paid') existing.paid += amount;
+      byMonth.set(p.month, existing);
+    }
+
+    const sortedMonths = [...byMonth.keys()].sort().slice(-6);
+    const recentMonths = sortedMonths.map((month) => {
+      const { due, paid } = byMonth.get(month)!;
+      const [y, m] = month.split('-').map(Number);
+      const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', {
+        month: 'short',
+        year: '2-digit',
+      });
+      return { month, label, due, paid };
+    });
+
+    return {
+      paymentSummary: { paidAmount, unpaidAmount, overdueAmount },
+      recentMonths,
+    };
+  }
+
   async createParkingRequest(
     tenantId: string,
     body: { leaseId: string; licensePlate: string },
