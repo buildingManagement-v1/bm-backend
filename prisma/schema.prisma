@@ -164,7 +164,8 @@ model Building {
   invoices               Invoice[]
   announcements          Announcement[]
   utilityReadings        UtilityReading[]
-  parkingRegistrations    ParkingRegistration[]
+  parkingRegistrations     ParkingRegistration[]
+  tenantPaymentRequests   TenantPaymentRequest[]
 
   managerRoles     ManagerBuildingRole[]
   units            Unit[]
@@ -220,7 +221,8 @@ model Unit {
   maintenanceRequests    MaintenanceRequest[]
   payments               Payment[]
   invoices               Invoice[]
-  parkingRegistrations   ParkingRegistration[]
+  parkingRegistrations    ParkingRegistration[]
+  tenantPaymentRequests   TenantPaymentRequest[]
 
   building    Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
@@ -254,7 +256,8 @@ model Tenant {
   invoices               Invoice[]
   maintenanceRequests    MaintenanceRequest[]
   payments               Payment[]
-  parkingRegistrations   ParkingRegistration[]
+  parkingRegistrations    ParkingRegistration[]
+  tenantPaymentRequests  TenantPaymentRequest[]
 
   @@index([buildingId])
   @@map("tenants")
@@ -284,8 +287,9 @@ model Lease {
   tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   unit                 Unit                 @relation(fields: [unitId], references: [id], onDelete: Cascade)
   building             Building             @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  paymentPeriods       PaymentPeriod[]
-  parkingRegistrations ParkingRegistration[]
+  paymentPeriods        PaymentPeriod[]
+  parkingRegistrations  ParkingRegistration[]
+  tenantPaymentRequests TenantPaymentRequest[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -315,6 +319,42 @@ model ParkingRegistration {
   @@index([unitId])
   @@index([licensePlate])
   @@map("parking_registrations")
+}
+
+enum PaymentRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+model TenantPaymentRequest {
+  id              String               @id @default(uuid())
+  buildingId      String               @map("building_id")
+  tenantId        String               @map("tenant_id")
+  leaseId         String               @map("lease_id")
+  unitId          String               @map("unit_id")
+  amount          Decimal
+  type            PaymentType
+  paymentDate     DateTime             @map("payment_date")
+  monthsCovered   Json?                @map("months_covered") // ["2025-01", "2025-02"]
+  notes           String?
+  receiptUrl      String               @map("receipt_url")
+  status          PaymentRequestStatus @default(pending)
+  reviewedAt      DateTime?            @map("reviewed_at")
+  reviewedById    String?              @map("reviewed_by_id")
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  building  Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("tenant_payment_requests")
 }
 
 enum MaintenanceRequestStatus {

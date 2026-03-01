@@ -8,5 +8,6 @@ import { PdfModule } from 'src/common/pdf/pdf.module';
   imports: [ActivityLogsModule, PdfModule],
   providers: [PaymentsService],
   controllers: [PaymentsController],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

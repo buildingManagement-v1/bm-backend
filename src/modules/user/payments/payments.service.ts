@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
@@ -314,5 +315,45 @@ export class PaymentsService {
       select: { name: true },
     });
     return user?.name || 'Unknown';
+  }
+
+  async createFromRequest(
+    requestId: string,
+    buildingId: string,
+    userId: string,
+    userRole: string,
+  ) {
+    const request = await this.prisma.tenantPaymentRequest.findFirst({
+      where: { id: requestId, buildingId },
+      include: { tenant: { select: { id: true } } },
+    });
+    if (!request) {
+      throw new NotFoundException('Payment request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new ConflictException(
+        'This payment request has already been processed',
+      );
+    }
+    const monthsCovered = request.monthsCovered as string[] | undefined;
+    const dto: CreatePaymentDto = {
+      tenantId: request.tenantId,
+      unitId: request.unitId,
+      amount: Number(request.amount),
+      type: request.type,
+      paymentDate: request.paymentDate.toISOString(),
+      monthsCovered,
+      notes: request.notes ?? undefined,
+    };
+    const payment = await this.create(buildingId, dto, userId, userRole);
+    await this.prisma.tenantPaymentRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'approved',
+        reviewedAt: new Date(),
+        reviewedById: userId,
+      },
+    });
+    return payment;
   }
 }
