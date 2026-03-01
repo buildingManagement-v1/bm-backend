@@ -409,7 +409,7 @@ async function main() {
       ];
       const name = names[(tenantIndex - 1) % names.length] + ` ${tenantIndex}`;
       const tenant = await prisma.tenant.upsert({
-        where: { email },
+        where: { buildingId_email: { buildingId: b.id, email } },
         update: {},
         create: {
           buildingId: b.id,

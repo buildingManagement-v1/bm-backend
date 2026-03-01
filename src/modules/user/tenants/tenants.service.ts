@@ -27,12 +27,14 @@ export class TenantsService {
     userRole: string,
     dto: CreateTenantDto,
   ) {
-    const existingTenant = await this.prisma.tenant.findUnique({
-      where: { email: dto.email },
+    const existingTenant = await this.prisma.tenant.findFirst({
+      where: { buildingId, email: dto.email },
     });
 
     if (existingTenant) {
-      throw new ConflictException('Tenant with this email already exists');
+      throw new ConflictException(
+        'A tenant with this email already exists in this building',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -179,12 +181,14 @@ export class TenantsService {
     }
 
     if (dto.email && dto.email !== tenant.email) {
-      const existingTenant = await this.prisma.tenant.findUnique({
-        where: { email: dto.email },
+      const existingTenant = await this.prisma.tenant.findFirst({
+        where: { buildingId, email: dto.email },
       });
 
       if (existingTenant) {
-        throw new ConflictException('Tenant with this email already exists');
+        throw new ConflictException(
+          'A tenant with this email already exists in this building',
+        );
       }
     }
 
@@ -274,13 +278,15 @@ export class TenantsService {
     userRole: string,
     dto: OnboardTenantDto,
   ) {
-    // Validate tenant email doesn't exist
-    const existingTenant = await this.prisma.tenant.findUnique({
-      where: { email: dto.email },
+    // Validate tenant email doesn't exist in this building
+    const existingTenant = await this.prisma.tenant.findFirst({
+      where: { buildingId, email: dto.email },
     });
 
     if (existingTenant) {
-      throw new ConflictException('Tenant with this email already exists');
+      throw new ConflictException(
+        'A tenant with this email already exists in this building',
+      );
     }
 
     // Validate unit exists and is vacant

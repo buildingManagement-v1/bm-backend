@@ -243,7 +243,7 @@ model Tenant {
   id                           String        @id @default(uuid())
   buildingId                   String        @map("building_id")
   name                         String
-  email                        String        @unique
+  email                        String
   phone                        String?
   passwordHash                 String?       @map("password_hash")
   status                       TenantStatus  @default(inactive)
@@ -262,6 +262,7 @@ model Tenant {
   tenantPaymentRequests  TenantPaymentRequest[]
   tenantParkingRequests  TenantParkingRequest[]
 
+  @@unique([buildingId, email])
   @@index([buildingId])
   @@map("tenants")
 }

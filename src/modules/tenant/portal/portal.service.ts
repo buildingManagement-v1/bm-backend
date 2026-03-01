@@ -75,11 +75,19 @@ export class PortalService {
 
   async updateProfile(tenantId: string, body: { email?: string }) {
     if (body.email !== undefined) {
-      const existing = await this.prisma.tenant.findUnique({
-        where: { email: body.email },
+      const current = await this.prisma.tenant.findFirst({
+        where: { id: tenantId },
+        select: { buildingId: true },
       });
-      if (existing && existing.id !== tenantId) {
-        throw new BadRequestException('Email already in use');
+      if (current) {
+        const existing = await this.prisma.tenant.findFirst({
+          where: { buildingId: current.buildingId, email: body.email },
+        });
+        if (existing && existing.id !== tenantId) {
+          throw new BadRequestException(
+            'A tenant with this email already exists in this building',
+          );
+        }
       }
     }
     const tenant = await this.prisma.tenant.update({

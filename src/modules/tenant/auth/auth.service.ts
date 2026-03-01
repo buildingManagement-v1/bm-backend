@@ -22,7 +22,7 @@ export class TenantAuthService {
   ) {}
 
   async login(dto: TenantLoginDto) {
-    const tenant = await this.prisma.tenant.findUnique({
+    const candidates = await this.prisma.tenant.findMany({
       where: { email: dto.email },
       include: {
         building: {
@@ -34,26 +34,23 @@ export class TenantAuthService {
       },
     });
 
-    if (!tenant) {
+    if (candidates.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (tenant.status === 'inactive') {
-      throw new UnauthorizedException('Account is inactive');
+    // Same email can exist in multiple buildings (each has its own password)
+    let tenant: (typeof candidates)[0] | null = null;
+    for (const t of candidates) {
+      if (!t.passwordHash) continue;
+      if (t.status === 'inactive') continue;
+      const match = await bcrypt.compare(dto.password, t.passwordHash);
+      if (match) {
+        tenant = t;
+        break;
+      }
     }
 
-    if (!tenant.passwordHash) {
-      throw new UnauthorizedException(
-        'Password not set. Please contact building management.',
-      );
-    }
-
-    const isPasswordValid = await bcrypt.compare(
-      dto.password,
-      tenant.passwordHash,
-    );
-
-    if (!isPasswordValid) {
+    if (!tenant) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -87,7 +84,7 @@ export class TenantAuthService {
   }
 
   async requestOtp(dto: RequestOtpDto) {
-    const tenant = await this.prisma.tenant.findUnique({
+    const tenant = await this.prisma.tenant.findFirst({
       where: { email: dto.email },
     });
 
@@ -108,7 +105,7 @@ export class TenantAuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const tenant = await this.prisma.tenant.findUnique({
+    const tenant = await this.prisma.tenant.findFirst({
       where: { email: dto.email },
     });
 
@@ -185,7 +182,7 @@ export class TenantAuthService {
         unitId: string | null;
       }>(refreshToken);
 
-      const tenant = await this.prisma.tenant.findUnique({
+      const tenant = await this.prisma.tenant.findFirst({
         where: { id: payload.sub },
       });
 
