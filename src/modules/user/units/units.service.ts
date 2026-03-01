@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUnitDto, UpdateUnitDto } from './dto';
@@ -227,6 +228,19 @@ export class UnitsService {
 
     if (unit.buildingId !== buildingId) {
       throw new NotFoundException('Unit not found in this building');
+    }
+
+    const activeLeaseCount = await this.prisma.lease.count({
+      where: {
+        unitId: id,
+        status: 'active' as const,
+        deletedAt: null,
+      },
+    });
+    if (activeLeaseCount > 0) {
+      throw new ConflictException(
+        'Cannot delete unit: it has an active lease. End or terminate the lease first.',
+      );
     }
 
     await this.softDeleteService.softDeleteUnit(id, userId);
