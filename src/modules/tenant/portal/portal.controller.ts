@@ -186,6 +186,7 @@ export class PortalController {
     @User() user: { id: string },
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('q') q?: string,
   ) {
     const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
     const offsetNum = Math.max(0, Number(offset) || 0);
@@ -193,6 +194,7 @@ export class PortalController {
       user.id,
       limitNum,
       offsetNum,
+      q,
     );
   }
 
@@ -207,5 +209,40 @@ export class PortalController {
     const { createReadStream } = await import('fs');
     const stream = createReadStream(filePath);
     return new StreamableFile(stream);
+  }
+
+  @Post('parking-requests')
+  @ApiOperation({ summary: 'Submit parking registration request' })
+  @ApiResponse({ status: 201, description: 'Parking request submitted' })
+  async createParkingRequest(
+    @User() user: { id: string },
+    @Body() body: { leaseId: string; licensePlate: string },
+  ) {
+    return await this.portalService.createParkingRequest(user.id, {
+      leaseId: String(body.leaseId),
+      licensePlate: String(body.licensePlate ?? ''),
+    });
+  }
+
+  @Get('parking-requests')
+  @ApiOperation({ summary: 'Get my parking requests (paginated)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return paginated parking requests',
+  })
+  async getParkingRequests(
+    @User() user: { id: string },
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('q') q?: string,
+  ) {
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const offsetNum = Math.max(0, Number(offset) || 0);
+    return await this.portalService.getParkingRequests(
+      user.id,
+      limitNum,
+      offsetNum,
+      q,
+    );
   }
 }

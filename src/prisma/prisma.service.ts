@@ -53,6 +53,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.tenantPaymentRequest;
   }
 
+  get tenantParkingRequest() {
+    return this.client.tenantParkingRequest;
+  }
+
   get maintenanceRequest() {
     return this.client.maintenanceRequest;
   }

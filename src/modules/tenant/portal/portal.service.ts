@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Prisma } from 'generated/prisma/client';
 import { SubmitMaintenanceRequestDto } from './dto';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { EmailService } from 'src/common/email/email.service';
@@ -332,8 +333,18 @@ export class PortalService {
       },
       include: {
         unit: { select: { id: true, unitNumber: true, floor: true } },
+        tenant: { select: { name: true } },
       },
     });
+
+    await this.notifyBuildingOwnerAndManagers(
+      tenant.buildingId,
+      ['payment_manager', 'operations_manager'],
+      'payment_request_created',
+      'New payment request',
+      `${request.tenant.name} submitted a payment request (Unit ${request.unit.unitNumber}, ETB ${Number(body.amount).toLocaleString()})`,
+      `/dashboard/payment-requests?building=${tenant.buildingId}`,
+    );
 
     return {
       success: true,
@@ -342,8 +353,65 @@ export class PortalService {
     };
   }
 
-  async getPaymentRequests(tenantId: string, limit = 20, offset = 0) {
-    const where = { tenantId };
+  private async notifyBuildingOwnerAndManagers(
+    buildingId: string,
+    roles: Array<'payment_manager' | 'operations_manager' | 'tenant_manager'>,
+    type: 'payment_request_created' | 'parking_request_created',
+    title: string,
+    message: string,
+    link: string,
+  ) {
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { userId: true },
+    });
+    if (building?.userId) {
+      await this.notificationsService.create({
+        userId: building.userId,
+        userType: 'user',
+        type,
+        title,
+        message,
+        link,
+      });
+    }
+    const managerRoles = await this.prisma.managerBuildingRole.findMany({
+      where: {
+        buildingId,
+        roles: { hasSome: roles },
+      },
+      select: { managerId: true },
+    });
+    for (const { managerId } of managerRoles) {
+      await this.notificationsService.create({
+        userId: managerId,
+        userType: 'manager',
+        type,
+        title,
+        message,
+        link,
+      });
+    }
+  }
+
+  async getPaymentRequests(
+    tenantId: string,
+    limit = 20,
+    offset = 0,
+    q?: string,
+  ) {
+    const where: Prisma.TenantPaymentRequestWhereInput = { tenantId };
+    if (q?.trim()) {
+      const term = q.trim();
+      const orConditions: Prisma.TenantPaymentRequestWhereInput[] = [
+        { unit: { unitNumber: { contains: term, mode: 'insensitive' } } },
+      ];
+      const amountNum = Number(term);
+      if (!Number.isNaN(amountNum)) {
+        orConditions.push({ amount: amountNum });
+      }
+      where.OR = orConditions;
+    }
     const [totalCount, data] = await Promise.all([
       this.prisma.tenantPaymentRequest.count({ where }),
       this.prisma.tenantPaymentRequest.findMany({
@@ -386,6 +454,123 @@ export class PortalService {
       rentAmount: lease.rentAmount,
       periods: lease.paymentPeriods,
     }));
+  }
+
+  async createParkingRequest(
+    tenantId: string,
+    body: { leaseId: string; licensePlate: string },
+  ) {
+    const licensePlate = body.licensePlate
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+    if (!licensePlate) {
+      throw new BadRequestException('License plate is required');
+    }
+    const lease = await this.prisma.lease.findFirst({
+      where: {
+        id: body.leaseId,
+        tenantId,
+        status: 'active',
+      },
+      select: {
+        id: true,
+        buildingId: true,
+        unitId: true,
+        carsAllowed: true,
+      },
+    });
+    if (!lease) {
+      throw new BadRequestException('No active lease found for this unit');
+    }
+    const existingCount = await this.prisma.parkingRegistration.count({
+      where: { leaseId: lease.id },
+    });
+    if (existingCount >= lease.carsAllowed) {
+      throw new BadRequestException(
+        `Parking limit reached for this lease. Maximum ${lease.carsAllowed} car(s) allowed.`,
+      );
+    }
+    const existingPlate = await this.prisma.parkingRegistration.findUnique({
+      where: {
+        leaseId_licensePlate: { leaseId: lease.id, licensePlate },
+      },
+    });
+    if (existingPlate) {
+      throw new BadRequestException(
+        'This license plate is already registered for this unit.',
+      );
+    }
+    const pendingSame = await this.prisma.tenantParkingRequest.findFirst({
+      where: {
+        leaseId: lease.id,
+        licensePlate,
+        status: 'pending',
+      },
+    });
+    if (pendingSame) {
+      throw new BadRequestException(
+        'A pending request for this license plate on this unit already exists.',
+      );
+    }
+    const request = await this.prisma.tenantParkingRequest.create({
+      data: {
+        buildingId: lease.buildingId,
+        tenantId,
+        leaseId: lease.id,
+        unitId: lease.unitId,
+        licensePlate,
+      },
+      include: {
+        unit: { select: { id: true, unitNumber: true, floor: true } },
+        tenant: { select: { name: true } },
+      },
+    });
+
+    await this.notifyBuildingOwnerAndManagers(
+      lease.buildingId,
+      ['tenant_manager', 'operations_manager'],
+      'parking_request_created',
+      'New parking request',
+      `${request.tenant.name} requested parking for ${licensePlate} (Unit ${request.unit.unitNumber})`,
+      `/dashboard/parking-requests?building=${lease.buildingId}`,
+    );
+
+    return {
+      success: true,
+      data: request,
+      message: 'Parking request submitted. It will be reviewed by management.',
+    };
+  }
+
+  async getParkingRequests(
+    tenantId: string,
+    limit = 20,
+    offset = 0,
+    q?: string,
+  ) {
+    const where: Prisma.TenantParkingRequestWhereInput = { tenantId };
+    if (q?.trim()) {
+      const term = q.trim();
+      where.OR = [
+        { unit: { unitNumber: { contains: term, mode: 'insensitive' } } },
+        { licensePlate: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const [totalCount, data] = await Promise.all([
+      this.prisma.tenantParkingRequest.count({ where }),
+      this.prisma.tenantParkingRequest.findMany({
+        where,
+        include: {
+          unit: { select: { id: true, unitNumber: true, floor: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+    const page_info = buildPageInfo(limit, offset, totalCount);
+    return { success: true, data, meta: { page_info } };
   }
 
   async getReceiptPath(tenantId: string, requestId: string): Promise<string> {

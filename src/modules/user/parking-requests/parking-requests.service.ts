@@ -4,18 +4,17 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { Prisma } from 'generated/prisma/client';
+import { NotificationType, Prisma } from 'generated/prisma/client';
 import { buildPageInfo } from 'src/common/pagination';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
-import * as path from 'path';
 
 const requestInclude = {
   tenant: { select: { id: true, name: true, email: true } },
   unit: { select: { id: true, unitNumber: true, floor: true } },
-} satisfies Prisma.TenantPaymentRequestInclude;
+} satisfies Prisma.TenantParkingRequestInclude;
 
 @Injectable()
-export class PaymentRequestsService {
+export class ParkingRequestsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
@@ -27,7 +26,7 @@ export class PaymentRequestsService {
     offset = 0,
     filters?: { status?: string; q?: string },
   ) {
-    const where: Prisma.TenantPaymentRequestWhereInput = { buildingId };
+    const where: Prisma.TenantParkingRequestWhereInput = { buildingId };
     if (
       filters?.status &&
       ['pending', 'approved', 'rejected'].includes(filters.status)
@@ -36,20 +35,16 @@ export class PaymentRequestsService {
     }
     if (filters?.q?.trim()) {
       const q = filters.q.trim();
-      const orConditions: Prisma.TenantPaymentRequestWhereInput[] = [
+      where.OR = [
         { tenant: { name: { contains: q, mode: 'insensitive' } } },
         { tenant: { email: { contains: q, mode: 'insensitive' } } },
         { unit: { unitNumber: { contains: q, mode: 'insensitive' } } },
+        { licensePlate: { contains: q, mode: 'insensitive' } },
       ];
-      const amountNum = Number(q);
-      if (!Number.isNaN(amountNum)) {
-        orConditions.push({ amount: amountNum });
-      }
-      where.OR = orConditions;
     }
     const [totalCount, data] = await Promise.all([
-      this.prisma.tenantPaymentRequest.count({ where }),
-      this.prisma.tenantPaymentRequest.findMany({
+      this.prisma.tenantParkingRequest.count({ where }),
+      this.prisma.tenantParkingRequest.findMany({
         where,
         include: requestInclude,
         orderBy: { createdAt: 'desc' },
@@ -62,12 +57,12 @@ export class PaymentRequestsService {
   }
 
   async findOne(id: string, buildingId: string) {
-    const request = await this.prisma.tenantPaymentRequest.findFirst({
+    const request = await this.prisma.tenantParkingRequest.findFirst({
       where: { id, buildingId },
       include: requestInclude,
     });
     if (!request) {
-      throw new NotFoundException('Payment request not found');
+      throw new NotFoundException('Parking request not found');
     }
     return request;
   }
@@ -78,19 +73,19 @@ export class PaymentRequestsService {
     userId: string,
     rejectionReason?: string,
   ) {
-    const request = await this.prisma.tenantPaymentRequest.findFirst({
+    const request = await this.prisma.tenantParkingRequest.findFirst({
       where: { id, buildingId },
       include: { unit: { select: { unitNumber: true } } },
     });
     if (!request) {
-      throw new NotFoundException('Payment request not found');
+      throw new NotFoundException('Parking request not found');
     }
     if (request.status !== 'pending') {
       throw new ConflictException(
-        'This payment request has already been processed',
+        'This parking request has already been processed',
       );
     }
-    await this.prisma.tenantPaymentRequest.update({
+    await this.prisma.tenantParkingRequest.update({
       where: { id },
       data: {
         status: 'rejected',
@@ -102,23 +97,11 @@ export class PaymentRequestsService {
     await this.notificationsService.create({
       userId: request.tenantId,
       userType: 'tenant',
-      type: 'payment_request_updated',
-      title: 'Payment request rejected',
-      message: `Your payment request (Unit ${request.unit.unitNumber}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
-      link: '/tenant/payment-requests',
+      type: 'parking_request_updated' as NotificationType,
+      title: 'Parking request rejected',
+      message: `Your parking request (Unit ${request.unit.unitNumber}, ${request.licensePlate}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+      link: '/tenant/parking-requests',
     });
     return { success: true };
-  }
-
-  async getReceiptPath(requestId: string, buildingId: string): Promise<string> {
-    const request = await this.prisma.tenantPaymentRequest.findFirst({
-      where: { id: requestId, buildingId },
-      select: { receiptUrl: true },
-    });
-    if (!request) {
-      throw new NotFoundException('Payment request not found');
-    }
-    const root = process.cwd();
-    return path.join(root, 'uploads', request.receiptUrl);
   }
 }

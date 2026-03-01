@@ -8,6 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { CreateParkingRegistrationDto } from './dto';
 import { buildPageInfo } from 'src/common/pagination';
+import { NotificationsService } from 'src/common/notifications/notifications.service';
 
 const registrationInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -17,7 +18,10 @@ const registrationInclude = {
 
 @Injectable()
 export class ParkingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   private normalizeLicensePlate(plate: string): string {
     return plate.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -134,5 +138,76 @@ export class ParkingService {
     });
 
     return { success: true };
+  }
+
+  async createFromRequest(
+    requestId: string,
+    buildingId: string,
+    userId: string,
+  ) {
+    const request = await this.prisma.tenantParkingRequest.findFirst({
+      where: { id: requestId, buildingId },
+      include: {
+        lease: { select: { id: true, carsAllowed: true } },
+        unit: { select: { unitNumber: true } },
+      },
+    });
+    if (!request) {
+      throw new NotFoundException('Parking request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new ConflictException(
+        'This parking request has already been processed',
+      );
+    }
+    const licensePlate = this.normalizeLicensePlate(request.licensePlate);
+    const existingCount = await this.prisma.parkingRegistration.count({
+      where: { leaseId: request.leaseId },
+    });
+    if (existingCount >= request.lease.carsAllowed) {
+      throw new BadRequestException(
+        `Parking limit reached for this lease. Maximum ${request.lease.carsAllowed} car(s) allowed.`,
+      );
+    }
+    const existingPlate = await this.prisma.parkingRegistration.findUnique({
+      where: {
+        leaseId_licensePlate: {
+          leaseId: request.leaseId,
+          licensePlate,
+        },
+      },
+    });
+    if (existingPlate) {
+      throw new ConflictException(
+        'This license plate is already registered for this unit.',
+      );
+    }
+    const registration = await this.prisma.parkingRegistration.create({
+      data: {
+        buildingId: request.buildingId,
+        leaseId: request.leaseId,
+        tenantId: request.tenantId,
+        unitId: request.unitId,
+        licensePlate,
+      },
+      include: registrationInclude,
+    });
+    await this.prisma.tenantParkingRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'approved',
+        reviewedAt: new Date(),
+        reviewedById: userId,
+      },
+    });
+    await this.notificationsService.create({
+      userId: request.tenantId,
+      userType: 'tenant',
+      type: 'parking_request_updated',
+      title: 'Parking request approved',
+      message: `Your parking request for ${licensePlate} (Unit ${request.unit.unitNumber}) has been approved. Your vehicle is now registered.`,
+      link: '/tenant/parking-requests',
+    });
+    return registration;
   }
 }

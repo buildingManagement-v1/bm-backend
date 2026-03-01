@@ -10,6 +10,7 @@ import { CreatePaymentDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { PdfService } from 'src/common/pdf/pdf.service';
+import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { buildPageInfo } from 'src/common/pagination';
 
 const paymentInclude = {
@@ -24,6 +25,7 @@ export class PaymentsService {
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
     private pdfService: PdfService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -325,7 +327,10 @@ export class PaymentsService {
   ) {
     const request = await this.prisma.tenantPaymentRequest.findFirst({
       where: { id: requestId, buildingId },
-      include: { tenant: { select: { id: true } } },
+      include: {
+        tenant: { select: { id: true } },
+        unit: { select: { unitNumber: true } },
+      },
     });
     if (!request) {
       throw new NotFoundException('Payment request not found');
@@ -353,6 +358,14 @@ export class PaymentsService {
         reviewedAt: new Date(),
         reviewedById: userId,
       },
+    });
+    await this.notificationsService.create({
+      userId: request.tenantId,
+      userType: 'tenant',
+      type: 'payment_request_updated',
+      title: 'Payment request approved',
+      message: `Your payment request (Unit ${request.unit.unitNumber}, ETB ${Number(request.amount).toLocaleString()}) has been approved and recorded.`,
+      link: '/tenant/payment-requests',
     });
     return payment;
   }
