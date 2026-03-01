@@ -23,6 +23,11 @@ export class UpdateLeaseDto {
   @IsNumber()
   securityDeposit?: number;
 
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsNumber()
+  carsAllowed?: number;
+
   @ApiProperty({
     enum: LeaseStatus,
     example: LeaseStatus['active'],

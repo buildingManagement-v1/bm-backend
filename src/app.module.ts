@@ -34,6 +34,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { SchedulerModule } from './common/scheduler/scheduler.module';
 import { NotificationsModule } from './common/notifications/notifications.module';
 import { PlanLimitsModule } from './common/plan-limits/plan-limits.module';
+import { ParkingModule } from './modules/user/parking/parking.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PlanLimitsModule } from './common/plan-limits/plan-limits.module';
     MaintenanceRequestsModule,
     PaymentsModule,
     LeasesModule,
+    ParkingModule,
     InvoicesModule,
     ReportsModule,
     DashboardModule,
@@ -80,6 +82,7 @@ export class AppModule implements NestModule {
         'v1/app/payments',
         'v1/app/invoices',
         'v1/app/leases',
+        'v1/app/parking',
         'v1/app/reports',
         'v1/app/dashboard',
         'v1/app/activity-logs',

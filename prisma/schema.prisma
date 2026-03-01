@@ -157,13 +157,14 @@ model Building {
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
   
-  tenants              Tenant[]
-  leases               Lease[]
-  maintenanceRequests  MaintenanceRequest[]
-  payments             Payment[]
-  invoices             Invoice[]
-  announcements        Announcement[]
-  utilityReadings      UtilityReading[]
+  tenants                Tenant[]
+  leases                 Lease[]
+  maintenanceRequests    MaintenanceRequest[]
+  payments               Payment[]
+  invoices               Invoice[]
+  announcements          Announcement[]
+  utilityReadings        UtilityReading[]
+  parkingRegistrations    ParkingRegistration[]
 
   managerRoles     ManagerBuildingRole[]
   units            Unit[]
@@ -215,10 +216,11 @@ model Unit {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  leases               Lease[]
-  maintenanceRequests  MaintenanceRequest[]
-  payments             Payment[]
-  invoices             Invoice[]
+  leases                 Lease[]
+  maintenanceRequests    MaintenanceRequest[]
+  payments               Payment[]
+  invoices               Invoice[]
+  parkingRegistrations   ParkingRegistration[]
 
   building    Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
@@ -247,11 +249,12 @@ model Tenant {
   createdAt                    DateTime      @default(now()) @map("created_at")
   updatedAt                    DateTime      @updatedAt @map("updated_at")
 
-  building                     Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  leases                       Lease[]
-  invoices                     Invoice[] 
-  maintenanceRequests          MaintenanceRequest[]
-  payments                     Payment[]
+  building               Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  leases                 Lease[]
+  invoices               Invoice[]
+  maintenanceRequests    MaintenanceRequest[]
+  payments               Payment[]
+  parkingRegistrations   ParkingRegistration[]
 
   @@index([buildingId])
   @@map("tenants")
@@ -272,21 +275,46 @@ model Lease {
   endDate         DateTime      @map("end_date")
   rentAmount      Decimal       @map("rent_amount")
   securityDeposit Decimal?      @map("security_deposit")
+  carsAllowed     Int           @default(0) @map("cars_allowed")
   status          LeaseStatus   @default(active)
   terms           Json?
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit            Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  paymentPeriods  PaymentPeriod[]
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit                 Unit                 @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building             Building             @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  paymentPeriods       PaymentPeriod[]
+  parkingRegistrations ParkingRegistration[]
 
   @@index([tenantId])
   @@index([unitId])
   @@index([buildingId])
   @@index([status])
   @@map("leases")
+}
+
+model ParkingRegistration {
+  id          String   @id @default(uuid())
+  buildingId  String   @map("building_id")
+  leaseId     String   @map("lease_id")
+  tenantId    String   @map("tenant_id")
+  unitId      String   @map("unit_id")
+  licensePlate String  @map("license_plate")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  building  Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, licensePlate])
+  @@index([buildingId])
+  @@index([tenantId])
+  @@index([unitId])
+  @@index([licensePlate])
+  @@map("parking_registrations")
 }
 
 enum MaintenanceRequestStatus {
