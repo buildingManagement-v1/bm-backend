@@ -176,6 +176,21 @@ export class PortalController {
     return { success: true, data };
   }
 
+  @Get('upcoming-payments')
+  @ApiOperation({ summary: 'Get upcoming (unpaid/overdue) rent payments' })
+  @ApiResponse({ status: 200, description: 'Return upcoming payments list' })
+  async getUpcomingPayments(
+    @User() user: { id: string },
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = Math.min(20, Math.max(1, Number(limit) || 10));
+    const data = await this.portalService.getUpcomingPayments(
+      user.id,
+      limitNum,
+    );
+    return { success: true, data };
+  }
+
   @Get('payment-requests')
   @ApiOperation({ summary: 'Get my payment requests (paginated)' })
   @ApiResponse({

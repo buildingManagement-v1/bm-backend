@@ -456,6 +456,45 @@ export class PortalService {
     }));
   }
 
+  async getUpcomingPayments(tenantId: string, limit = 10) {
+    const periods = await this.prisma.paymentPeriod.findMany({
+      where: {
+        lease: {
+          tenantId,
+          status: 'active',
+        },
+        status: { in: ['unpaid', 'overdue'] },
+      },
+      orderBy: { month: 'asc' },
+      take: limit,
+      include: {
+        lease: {
+          select: {
+            id: true,
+            unit: { select: { unitNumber: true, floor: true } },
+          },
+        },
+      },
+    });
+    return periods.map((p) => {
+      const [y, m] = p.month.split('-').map(Number);
+      const dueLabel = new Date(y, m - 1, 1).toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+      return {
+        id: p.id,
+        month: p.month,
+        dueLabel,
+        amount: Number(p.rentAmount),
+        status: p.status as 'unpaid' | 'overdue',
+        unitNumber: p.lease.unit.unitNumber,
+        unitFloor: p.lease.unit.floor ?? undefined,
+        leaseId: p.lease.id,
+      };
+    });
+  }
+
   async createParkingRequest(
     tenantId: string,
     body: { leaseId: string; licensePlate: string },
