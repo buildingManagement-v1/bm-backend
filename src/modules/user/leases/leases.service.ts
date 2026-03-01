@@ -9,6 +9,8 @@ import { Prisma } from 'generated/prisma/client';
 import { CreateLeaseDto, UpdateLeaseDto } from './dto';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 const leaseInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -21,6 +23,7 @@ export class LeasesService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(
@@ -30,7 +33,7 @@ export class LeasesService {
     userRole: string,
   ) {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { id: dto.tenantId, buildingId },
+      where: whereActive({ id: dto.tenantId, buildingId }),
     });
 
     if (!tenant) {
@@ -38,7 +41,7 @@ export class LeasesService {
     }
 
     const unit = await this.prisma.unit.findFirst({
-      where: { id: dto.unitId, buildingId },
+      where: whereActive({ id: dto.unitId, buildingId }),
     });
 
     if (!unit) {
@@ -46,9 +49,9 @@ export class LeasesService {
     }
 
     const overlapping = await this.prisma.lease.findFirst({
-      where: {
+      where: whereActive({
         unitId: dto.unitId,
-        status: 'active',
+        status: 'active' as const,
         OR: [
           {
             AND: [
@@ -63,7 +66,7 @@ export class LeasesService {
             ],
           },
         ],
-      },
+      }),
     });
 
     if (overlapping) {
@@ -149,7 +152,7 @@ export class LeasesService {
 
   async findAll(buildingId: string) {
     return await this.prisma.lease.findMany({
-      where: { buildingId },
+      where: whereActive({ buildingId }),
       include: leaseInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -157,7 +160,7 @@ export class LeasesService {
 
   async findOne(id: string, buildingId: string) {
     const lease = await this.prisma.lease.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
       include: leaseInclude,
     });
 
@@ -176,7 +179,7 @@ export class LeasesService {
     userRole: string,
   ) {
     const lease = await this.prisma.lease.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!lease) {
@@ -229,16 +232,14 @@ export class LeasesService {
     userRole: string,
   ) {
     const lease = await this.prisma.lease.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!lease) {
       throw new NotFoundException('Lease not found');
     }
 
-    await this.prisma.lease.delete({
-      where: { id },
-    });
+    await this.softDeleteService.softDeleteLease(id, userId);
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({
@@ -275,8 +276,8 @@ export class LeasesService {
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
     if (userRole === 'manager') {
-      const manager = await this.prisma.manager.findUnique({
-        where: { id: userId },
+      const manager = await this.prisma.manager.findFirst({
+        where: whereActive({ id: userId }),
         select: { name: true },
       });
       return manager?.name || 'Unknown';
@@ -291,7 +292,7 @@ export class LeasesService {
   async findByTenant(buildingId: string, tenantId: string) {
     // Verify tenant belongs to this building
     const tenant = await this.prisma.tenant.findFirst({
-      where: { id: tenantId, buildingId },
+      where: whereActive({ id: tenantId, buildingId }),
     });
 
     if (!tenant) {
@@ -299,10 +300,7 @@ export class LeasesService {
     }
 
     return await this.prisma.lease.findMany({
-      where: {
-        buildingId,
-        tenantId,
-      },
+      where: whereActive({ buildingId, tenantId }),
       include: leaseInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -315,7 +313,7 @@ export class LeasesService {
     userRole: string,
   ) {
     const lease = await this.prisma.lease.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!lease) {

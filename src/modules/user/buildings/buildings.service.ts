@@ -6,12 +6,15 @@ import {
 import { CreateBuildingDto, UpdateBuildingDto } from './dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class BuildingsService {
   constructor(
     private prisma: PrismaService,
     private planLimitsService: PlanLimitsService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(userId: string, dto: CreateBuildingDto) {
@@ -39,7 +42,7 @@ export class BuildingsService {
     if (userRole === 'manager') {
       const managerAssignments = await this.prisma.managerBuildingRole.findMany(
         {
-          where: { managerId: userId },
+          where: whereActive({ managerId: userId }),
           include: {
             building: true,
           },
@@ -51,12 +54,14 @@ export class BuildingsService {
         },
       );
 
-      return managerAssignments.map((assignment) => assignment.building);
+      return managerAssignments
+        .filter((a) => a.building && !a.building.deletedAt)
+        .map((assignment) => assignment.building);
     }
 
     // If owner, return their buildings
     const buildings = await this.prisma.building.findMany({
-      where: { userId },
+      where: whereActive({ userId }),
       orderBy: { createdAt: 'desc' },
     });
 
@@ -67,10 +72,10 @@ export class BuildingsService {
   async findOptions(userId: string, userRole: string) {
     if (userRole === 'manager') {
       const assignments = await this.prisma.managerBuildingRole.findMany({
-        where: { managerId: userId },
+        where: whereActive({ managerId: userId }),
         include: {
           building: {
-            select: { id: true, name: true, status: true },
+            select: { id: true, name: true, status: true, deletedAt: true },
           },
         },
         orderBy: { building: { createdAt: 'desc' } },
@@ -78,12 +83,14 @@ export class BuildingsService {
       return assignments
         .filter(
           (a): a is typeof a & { building: NonNullable<typeof a.building> } =>
-            a.building != null && a.building.status === 'active',
+            a.building != null &&
+            a.building.status === 'active' &&
+            !a.building.deletedAt,
         )
         .map((a) => ({ id: a.building.id, name: a.building.name }));
     }
     const buildings = await this.prisma.building.findMany({
-      where: { userId, status: 'active' },
+      where: whereActive({ userId, status: 'active' as const }),
       select: { id: true, name: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -91,8 +98,8 @@ export class BuildingsService {
   }
 
   async findOne(userId: string, buildingId: string, userRole: string) {
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
+    const building = await this.prisma.building.findFirst({
+      where: whereActive({ id: buildingId }),
     });
 
     if (!building) {
@@ -101,13 +108,8 @@ export class BuildingsService {
 
     // If manager, check if they have access to this building
     if (userRole === 'manager') {
-      const hasAccess = await this.prisma.managerBuildingRole.findUnique({
-        where: {
-          managerId_buildingId: {
-            managerId: userId,
-            buildingId,
-          },
-        },
+      const hasAccess = await this.prisma.managerBuildingRole.findFirst({
+        where: whereActive({ managerId: userId, buildingId }),
       });
 
       if (!hasAccess) {
@@ -127,10 +129,7 @@ export class BuildingsService {
 
   async update(userId: string, buildingId: string, dto: UpdateBuildingDto) {
     const building = await this.prisma.building.findFirst({
-      where: {
-        id: buildingId,
-        userId,
-      },
+      where: whereActive({ id: buildingId, userId }),
     });
 
     if (!building) {
@@ -147,19 +146,14 @@ export class BuildingsService {
 
   async remove(userId: string, buildingId: string) {
     const building = await this.prisma.building.findFirst({
-      where: {
-        id: buildingId,
-        userId,
-      },
+      where: whereActive({ id: buildingId, userId }),
     });
 
     if (!building) {
       throw new NotFoundException('Building not found');
     }
 
-    await this.prisma.building.delete({
-      where: { id: buildingId },
-    });
+    await this.softDeleteService.softDeleteBuilding(buildingId, userId);
 
     return { message: 'Building deleted successfully' };
   }

@@ -603,10 +603,8 @@ export class PortalService {
         `Parking limit reached for this lease. Maximum ${lease.carsAllowed} car(s) allowed.`,
       );
     }
-    const existingPlate = await this.prisma.parkingRegistration.findUnique({
-      where: {
-        leaseId_licensePlate: { leaseId: lease.id, licensePlate },
-      },
+    const existingPlate = await this.prisma.parkingRegistration.findFirst({
+      where: { leaseId: lease.id, licensePlate, deletedAt: null },
     });
     if (existingPlate) {
       throw new BadRequestException(

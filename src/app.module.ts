@@ -37,9 +37,11 @@ import { PlanLimitsModule } from './common/plan-limits/plan-limits.module';
 import { ParkingModule } from './modules/user/parking/parking.module';
 import { ParkingRequestsModule } from './modules/user/parking-requests/parking-requests.module';
 import { PaymentRequestsModule } from './modules/user/payment-requests/payment-requests.module';
+import { SoftDeleteModule } from './common/soft-delete/soft-delete.module';
 
 @Module({
   imports: [
+    SoftDeleteModule,
     TokenModule,
     EmailModule,
     ConfigModule,

@@ -18,6 +18,7 @@ import { ParkingService } from './parking.service';
 import { CreateParkingRegistrationDto } from './dto';
 import { ManagerRole } from 'generated/prisma/client';
 import { BuildingId } from 'src/common/decorators/building-id.decorator';
+import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { BuildingAccessGuard } from 'src/common/guards/building-access.guard';
 import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
@@ -89,8 +90,12 @@ export class ParkingController {
   @RequireManagerRoles(ManagerRole.tenant_manager)
   @ApiOperation({ summary: 'Remove a parking registration' })
   @ApiResponse({ status: 200, description: 'Registration removed' })
-  async remove(@BuildingId() buildingId: string, @Param('id') id: string) {
-    await this.parkingService.remove(id, buildingId);
+  async remove(
+    @BuildingId() buildingId: string,
+    @Param('id') id: string,
+    @User() user: { id: string },
+  ) {
+    await this.parkingService.remove(id, buildingId, user.id);
     return { success: true, message: 'Registration removed' };
   }
 }

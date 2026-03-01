@@ -13,6 +13,8 @@ import { Prisma } from 'generated/prisma/browser';
 import { EmailService } from 'src/common/email/email.service';
 import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
 import { buildPageInfo } from 'src/common/pagination';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class ManagersService {
@@ -21,14 +23,15 @@ export class ManagersService {
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
     private planLimitsService: PlanLimitsService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(userId: string, dto: CreateManagerDto) {
     await this.planLimitsService.canCreateManager(userId);
 
     // Check if email already exists
-    const existing = await this.prisma.manager.findUnique({
-      where: { email: dto.email },
+    const existing = await this.prisma.manager.findFirst({
+      where: whereActive({ email: dto.email }),
     });
 
     if (existing) {
@@ -37,10 +40,10 @@ export class ManagersService {
 
     // Verify all buildings belong to this user
     const buildings = await this.prisma.building.findMany({
-      where: {
+      where: whereActive({
         id: { in: dto.buildingAssignments.map((a) => a.buildingId) },
         userId,
-      },
+      }),
     });
 
     if (buildings.length !== dto.buildingAssignments.length) {
@@ -129,7 +132,7 @@ export class ManagersService {
     offset = 0,
     filters?: { status?: string; q?: string },
   ) {
-    const where: Prisma.ManagerWhereInput = { userId };
+    const where: Prisma.ManagerWhereInput = whereActive({ userId });
     if (filters?.status && ['active', 'inactive'].includes(filters.status)) {
       where.status = filters.status as 'active' | 'inactive';
     }
@@ -146,6 +149,7 @@ export class ManagersService {
         where,
         include: {
           buildingRoles: {
+            where: { deletedAt: null },
             include: {
               building: {
                 select: {
@@ -181,12 +185,10 @@ export class ManagersService {
 
   async findOne(userId: string, managerId: string) {
     const manager = await this.prisma.manager.findFirst({
-      where: {
-        id: managerId,
-        userId,
-      },
+      where: whereActive({ id: managerId, userId }),
       include: {
         buildingRoles: {
+          where: { deletedAt: null },
           include: {
             building: {
               select: {
@@ -222,10 +224,7 @@ export class ManagersService {
 
   async update(userId: string, managerId: string, dto: UpdateManagerDto) {
     const manager = await this.prisma.manager.findFirst({
-      where: {
-        id: managerId,
-        userId,
-      },
+      where: whereActive({ id: managerId, userId }),
     });
 
     if (!manager) {
@@ -233,8 +232,8 @@ export class ManagersService {
     }
 
     if (dto.email && dto.email !== manager.email) {
-      const existing = await this.prisma.manager.findUnique({
-        where: { email: dto.email },
+      const existing = await this.prisma.manager.findFirst({
+        where: whereActive({ email: dto.email }),
       });
 
       if (existing) {
@@ -245,10 +244,10 @@ export class ManagersService {
     // If updating building assignments, verify buildings belong to user
     if (dto.buildingAssignments) {
       const buildings = await this.prisma.building.findMany({
-        where: {
+        where: whereActive({
           id: { in: dto.buildingAssignments.map((a) => a.buildingId) },
           userId,
-        },
+        }),
       });
 
       if (buildings.length !== dto.buildingAssignments.length) {
@@ -283,9 +282,13 @@ export class ManagersService {
 
     // Update building assignments if provided
     if (dto.buildingAssignments) {
-      // Delete existing building roles
-      await this.prisma.managerBuildingRole.deleteMany({
+      // Soft-delete existing building roles
+      await this.prisma.managerBuildingRole.updateMany({
         where: { managerId },
+        data: { deletedAt: new Date(), deletedById: userId } as {
+          deletedAt: Date;
+          deletedById: string;
+        },
       });
 
       // Create new building roles
@@ -299,10 +302,11 @@ export class ManagersService {
     }
 
     // Return updated manager with building assignments
-    const managerWithRoles = await this.prisma.manager.findUnique({
-      where: { id: managerId },
+    const managerWithRoles = await this.prisma.manager.findFirst({
+      where: whereActive({ id: managerId }),
       include: {
         buildingRoles: {
+          where: { deletedAt: null },
           include: {
             building: {
               select: {
@@ -322,7 +326,7 @@ export class ManagersService {
     const userName = user?.name || 'Unknown';
 
     const currentAssignments = await this.prisma.managerBuildingRole.findMany({
-      where: { managerId },
+      where: whereActive({ managerId }),
       select: { buildingId: true },
     });
 
@@ -362,10 +366,7 @@ export class ManagersService {
 
   async remove(userId: string, managerId: string) {
     const manager = await this.prisma.manager.findFirst({
-      where: {
-        id: managerId,
-        userId,
-      },
+      where: whereActive({ id: managerId, userId }),
     });
 
     if (!manager) {
@@ -379,7 +380,7 @@ export class ManagersService {
     const userName = user?.name || 'Unknown';
 
     const assignments = await this.prisma.managerBuildingRole.findMany({
-      where: { managerId },
+      where: whereActive({ managerId }),
       select: { buildingId: true },
     });
 
@@ -399,9 +400,7 @@ export class ManagersService {
       });
     }
 
-    await this.prisma.manager.delete({
-      where: { id: managerId },
-    });
+    await this.softDeleteService.softDeleteManager(managerId, userId);
 
     return { message: 'Manager deleted successfully' };
   }

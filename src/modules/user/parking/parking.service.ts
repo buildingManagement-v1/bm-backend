@@ -10,6 +10,8 @@ import { CreateParkingRegistrationDto } from './dto';
 import { buildPageInfo } from 'src/common/pagination';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 const registrationInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -23,6 +25,7 @@ export class ParkingService {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private activityLogsService: ActivityLogsService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   private async getActorName(userId: string): Promise<string> {
@@ -31,8 +34,8 @@ export class ParkingService {
       select: { name: true },
     });
     if (user?.name) return user.name;
-    const manager = await this.prisma.manager.findUnique({
-      where: { id: userId },
+    const manager = await this.prisma.manager.findFirst({
+      where: whereActive({ id: userId }),
       select: { name: true },
     });
     return manager?.name ?? 'Unknown';
@@ -44,12 +47,12 @@ export class ParkingService {
 
   async create(buildingId: string, dto: CreateParkingRegistrationDto) {
     const lease = await this.prisma.lease.findFirst({
-      where: {
+      where: whereActive({
         buildingId,
         tenantId: dto.tenantId,
         unitId: dto.unitId,
-        status: 'active',
-      },
+        status: 'active' as const,
+      }),
       select: { id: true, carsAllowed: true },
     });
 
@@ -62,7 +65,7 @@ export class ParkingService {
     const licensePlate = this.normalizeLicensePlate(dto.licensePlate);
 
     const existingCount = await this.prisma.parkingRegistration.count({
-      where: { leaseId: lease.id },
+      where: whereActive({ leaseId: lease.id }),
     });
 
     if (existingCount >= lease.carsAllowed) {
@@ -71,13 +74,8 @@ export class ParkingService {
       );
     }
 
-    const existingPlate = await this.prisma.parkingRegistration.findUnique({
-      where: {
-        leaseId_licensePlate: {
-          leaseId: lease.id,
-          licensePlate,
-        },
-      },
+    const existingPlate = await this.prisma.parkingRegistration.findFirst({
+      where: whereActive({ leaseId: lease.id, licensePlate }),
     });
 
     if (existingPlate) {
@@ -106,7 +104,9 @@ export class ParkingService {
     offset = 0,
     filters?: { q?: string; tenantId?: string; unitId?: string },
   ) {
-    const where: Prisma.ParkingRegistrationWhereInput = { buildingId };
+    const where: Prisma.ParkingRegistrationWhereInput = whereActive({
+      buildingId,
+    });
 
     if (filters?.tenantId) {
       where.tenantId = filters.tenantId;
@@ -139,18 +139,16 @@ export class ParkingService {
     return { data, meta: { page_info } };
   }
 
-  async remove(id: string, buildingId: string) {
+  async remove(id: string, buildingId: string, userId: string) {
     const registration = await this.prisma.parkingRegistration.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!registration) {
       throw new NotFoundException('Parking registration not found');
     }
 
-    await this.prisma.parkingRegistration.delete({
-      where: { id },
-    });
+    await this.softDeleteService.softDeleteParkingRegistration(id, userId);
 
     return { success: true };
   }
@@ -177,20 +175,15 @@ export class ParkingService {
     }
     const licensePlate = this.normalizeLicensePlate(request.licensePlate);
     const existingCount = await this.prisma.parkingRegistration.count({
-      where: { leaseId: request.leaseId },
+      where: whereActive({ leaseId: request.leaseId }),
     });
     if (existingCount >= request.lease.carsAllowed) {
       throw new BadRequestException(
         `Parking limit reached for this lease. Maximum ${request.lease.carsAllowed} car(s) allowed.`,
       );
     }
-    const existingPlate = await this.prisma.parkingRegistration.findUnique({
-      where: {
-        leaseId_licensePlate: {
-          leaseId: request.leaseId,
-          licensePlate,
-        },
-      },
+    const existingPlate = await this.prisma.parkingRegistration.findFirst({
+      where: whereActive({ leaseId: request.leaseId, licensePlate }),
     });
     if (existingPlate) {
       throw new ConflictException(

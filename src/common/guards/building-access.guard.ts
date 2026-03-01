@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { whereActive } from '../soft-delete/soft-delete.scope';
 
 interface RequestUser {
   id: string;
@@ -38,8 +39,8 @@ export class BuildingAccessGuard implements CanActivate {
 
     // If user is building owner
     if (user.role !== 'manager') {
-      const building = await this.prisma.building.findUnique({
-        where: { id: buildingId },
+      const building = await this.prisma.building.findFirst({
+        where: whereActive({ id: buildingId }),
         select: { userId: true },
       });
 

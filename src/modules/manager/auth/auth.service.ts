@@ -15,6 +15,7 @@ import {
 import { TokenService } from '../../../common/token/token.service';
 import { EmailService } from '../../../common/email/email.service';
 import { OtpType, UserType } from 'generated/prisma/client';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -27,10 +28,11 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginManagerDto) {
-    const manager = await this.prisma.manager.findUnique({
-      where: { email: dto.email },
+    const manager = await this.prisma.manager.findFirst({
+      where: whereActive({ email: dto.email }),
       include: {
         buildingRoles: {
+          where: { deletedAt: null },
           include: {
             building: {
               select: {
@@ -97,8 +99,8 @@ export class AuthService {
   }
 
   async changePassword(managerId: string, dto: ChangePasswordDto) {
-    const manager = await this.prisma.manager.findUnique({
-      where: { id: managerId },
+    const manager = await this.prisma.manager.findFirst({
+      where: whereActive({ id: managerId }),
     });
 
     if (!manager) {
@@ -129,8 +131,8 @@ export class AuthService {
   }
 
   async updateEmail(managerId: string, dto: UpdateEmailDto) {
-    const existing = await this.prisma.manager.findUnique({
-      where: { email: dto.email },
+    const existing = await this.prisma.manager.findFirst({
+      where: whereActive({ email: dto.email }),
     });
     if (existing && existing.id !== managerId) {
       throw new ConflictException('Email already in use');
@@ -143,8 +145,8 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const manager = await this.prisma.manager.findUnique({
-      where: { email: dto.email },
+    const manager = await this.prisma.manager.findFirst({
+      where: whereActive({ email: dto.email }),
     });
 
     if (!manager) {
@@ -164,8 +166,8 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const manager = await this.prisma.manager.findUnique({
-      where: { email: dto.email },
+    const manager = await this.prisma.manager.findFirst({
+      where: whereActive({ email: dto.email }),
     });
 
     if (!manager) {
@@ -201,10 +203,11 @@ export class AuthService {
         buildings: string[];
       }>(refreshToken);
 
-      const manager = await this.prisma.manager.findUnique({
-        where: { id: payload.sub },
+      const manager = await this.prisma.manager.findFirst({
+        where: whereActive({ id: payload.sub }),
         include: {
           buildingRoles: {
+            where: { deletedAt: null },
             select: {
               buildingId: true,
             },

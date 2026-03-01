@@ -9,6 +9,8 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/browser';
 import { PlanLimitsService } from 'src/common/plan-limits/plan-limits.service';
 import { buildPageInfo } from 'src/common/pagination';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class UnitsService {
@@ -16,6 +18,7 @@ export class UnitsService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private planLimitsService: PlanLimitsService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(
@@ -26,13 +29,8 @@ export class UnitsService {
   ) {
     await this.planLimitsService.canCreateUnit(buildingId);
 
-    const existingUnit = await this.prisma.unit.findUnique({
-      where: {
-        buildingId_unitNumber: {
-          buildingId,
-          unitNumber: dto.unitNumber,
-        },
-      },
+    const existingUnit = await this.prisma.unit.findFirst({
+      where: whereActive({ buildingId, unitNumber: dto.unitNumber }),
     });
 
     if (existingUnit) {
@@ -83,7 +81,7 @@ export class UnitsService {
     offset = 0,
     filters?: { status?: string; q?: string },
   ) {
-    const where: Prisma.UnitWhereInput = { buildingId };
+    const where: Prisma.UnitWhereInput = whereActive({ buildingId });
     if (
       filters?.status &&
       ['vacant', 'occupied', 'inactive'].includes(filters.status)
@@ -123,8 +121,8 @@ export class UnitsService {
   }
 
   async findOne(buildingId: string, id: string) {
-    const unit = await this.prisma.unit.findUnique({
-      where: { id },
+    const unit = await this.prisma.unit.findFirst({
+      where: whereActive({ id }),
       include: {
         building: {
           select: {
@@ -153,8 +151,8 @@ export class UnitsService {
     userId: string,
     userRole: string,
   ) {
-    const unit = await this.prisma.unit.findUnique({
-      where: { id },
+    const unit = await this.prisma.unit.findFirst({
+      where: whereActive({ id }),
     });
 
     if (!unit) {
@@ -166,13 +164,8 @@ export class UnitsService {
     }
 
     if (dto.unitNumber && dto.unitNumber !== unit.unitNumber) {
-      const existingUnit = await this.prisma.unit.findUnique({
-        where: {
-          buildingId_unitNumber: {
-            buildingId,
-            unitNumber: dto.unitNumber,
-          },
-        },
+      const existingUnit = await this.prisma.unit.findFirst({
+        where: whereActive({ buildingId, unitNumber: dto.unitNumber }),
       });
 
       if (existingUnit) {
@@ -224,8 +217,8 @@ export class UnitsService {
     userId: string,
     userRole: string,
   ) {
-    const unit = await this.prisma.unit.findUnique({
-      where: { id },
+    const unit = await this.prisma.unit.findFirst({
+      where: whereActive({ id }),
     });
 
     if (!unit) {
@@ -236,9 +229,7 @@ export class UnitsService {
       throw new NotFoundException('Unit not found in this building');
     }
 
-    await this.prisma.unit.delete({
-      where: { id },
-    });
+    await this.softDeleteService.softDeleteUnit(id, userId);
 
     const userName = await this.getUserName(userId, userRole);
 
@@ -259,8 +250,8 @@ export class UnitsService {
   // Helper function
   private async getUserName(userId: string, userRole: string): Promise<string> {
     if (userRole === 'manager') {
-      const manager = await this.prisma.manager.findUnique({
-        where: { id: userId },
+      const manager = await this.prisma.manager.findFirst({
+        where: whereActive({ id: userId }),
         select: { name: true },
       });
       return manager?.name || 'Unknown';

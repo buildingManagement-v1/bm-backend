@@ -12,6 +12,8 @@ import { Prisma } from 'generated/prisma/browser';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from 'src/common/email/email.service';
 import { buildPageInfo } from 'src/common/pagination';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class TenantsService {
@@ -19,6 +21,7 @@ export class TenantsService {
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(
@@ -28,7 +31,7 @@ export class TenantsService {
     dto: CreateTenantDto,
   ) {
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: { buildingId, email: dto.email },
+      where: whereActive({ buildingId, email: dto.email }),
     });
 
     if (existingTenant) {
@@ -66,8 +69,8 @@ export class TenantsService {
       } as Prisma.InputJsonValue,
     });
 
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
+    const building = await this.prisma.building.findFirst({
+      where: whereActive({ id: buildingId }),
       select: { name: true },
     });
 
@@ -95,7 +98,7 @@ export class TenantsService {
     offset = 0,
     filters?: { status?: string; q?: string },
   ) {
-    const where: Prisma.TenantWhereInput = { buildingId };
+    const where: Prisma.TenantWhereInput = whereActive({ buildingId });
     if (filters?.status && ['active', 'inactive'].includes(filters.status)) {
       where.status = filters.status as 'active' | 'inactive';
     }
@@ -131,9 +134,10 @@ export class TenantsService {
 
   async findOne(id: string, buildingId: string) {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
       include: {
         leases: {
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           include: {
             unit: {
@@ -173,7 +177,7 @@ export class TenantsService {
     dto: UpdateTenantDto,
   ) {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!tenant) {
@@ -182,7 +186,7 @@ export class TenantsService {
 
     if (dto.email && dto.email !== tenant.email) {
       const existingTenant = await this.prisma.tenant.findFirst({
-        where: { buildingId, email: dto.email },
+        where: whereActive({ buildingId, email: dto.email }),
       });
 
       if (existingTenant) {
@@ -228,16 +232,14 @@ export class TenantsService {
     userRole: string,
   ) {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
 
-    await this.prisma.tenant.delete({
-      where: { id },
-    });
+    await this.softDeleteService.softDeleteTenant(id, userId);
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({
@@ -259,8 +261,8 @@ export class TenantsService {
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
     if (userRole === 'manager') {
-      const manager = await this.prisma.manager.findUnique({
-        where: { id: userId },
+      const manager = await this.prisma.manager.findFirst({
+        where: whereActive({ id: userId }),
         select: { name: true },
       });
       return manager?.name || 'Unknown';
@@ -280,7 +282,7 @@ export class TenantsService {
   ) {
     // Validate tenant email doesn't exist in this building
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: { buildingId, email: dto.email },
+      where: whereActive({ buildingId, email: dto.email }),
     });
 
     if (existingTenant) {
@@ -291,7 +293,7 @@ export class TenantsService {
 
     // Validate unit exists and is vacant
     const unit = await this.prisma.unit.findFirst({
-      where: { id: dto.unitId, buildingId },
+      where: whereActive({ id: dto.unitId, buildingId }),
     });
 
     if (!unit) {
@@ -393,8 +395,8 @@ export class TenantsService {
     });
 
     // Send email
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
+    const building = await this.prisma.building.findFirst({
+      where: whereActive({ id: buildingId }),
       select: { name: true },
     });
 
@@ -414,11 +416,11 @@ export class TenantsService {
     );
 
     // Return complete data
-    const tenantWithDetails = await this.prisma.tenant.findUnique({
-      where: { id: result.tenant.id },
+    const tenantWithDetails = await this.prisma.tenant.findFirst({
+      where: whereActive({ id: result.tenant.id }),
       include: {
         leases: {
-          where: { id: result.lease.id },
+          where: { id: result.lease.id, deletedAt: null },
           include: {
             unit: true,
             paymentPeriods: {

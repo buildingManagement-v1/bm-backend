@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { whereActive } from '../soft-delete/soft-delete.scope';
 import { MANAGER_ROLES_KEY } from '../decorators/require-manager-roles.decorator';
 import { ManagerRole } from 'generated/prisma/client';
 
@@ -59,13 +60,8 @@ export class ManagerRolesGuard implements CanActivate {
     // For managers, check if they have the required role in this building
     if (user.role === 'manager') {
       const managerBuildingRole =
-        await this.prisma.managerBuildingRole.findUnique({
-          where: {
-            managerId_buildingId: {
-              managerId: user.id,
-              buildingId,
-            },
-          },
+        await this.prisma.managerBuildingRole.findFirst({
+          where: whereActive({ managerId: user.id, buildingId }),
           select: {
             roles: true,
           },

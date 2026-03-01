@@ -14,6 +14,8 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { buildPageInfo } from 'src/common/pagination';
+import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class MaintenanceRequestsService {
@@ -22,6 +24,7 @@ export class MaintenanceRequestsService {
     private activityLogsService: ActivityLogsService,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   async create(
@@ -40,7 +43,7 @@ export class MaintenanceRequestsService {
       }
 
       const tenant = await this.prisma.tenant.findFirst({
-        where: { id: dto.tenantId, buildingId },
+        where: whereActive({ id: dto.tenantId, buildingId }),
       });
 
       if (!tenant) {
@@ -48,7 +51,10 @@ export class MaintenanceRequestsService {
       }
 
       const activeLease = await this.prisma.lease.findFirst({
-        where: { tenantId: dto.tenantId, status: 'active' },
+        where: whereActive({
+          tenantId: dto.tenantId,
+          status: 'active' as const,
+        }),
         select: { unitId: true },
       });
 
@@ -56,7 +62,7 @@ export class MaintenanceRequestsService {
       unitId = activeLease?.unitId || undefined;
     } else {
       const tenant = await this.prisma.tenant.findFirst({
-        where: { id: userId, buildingId },
+        where: whereActive({ id: userId, buildingId }),
       });
 
       if (!tenant) {
@@ -64,7 +70,7 @@ export class MaintenanceRequestsService {
       }
 
       const activeLease = await this.prisma.lease.findFirst({
-        where: { tenantId: userId, status: 'active' },
+        where: whereActive({ tenantId: userId, status: 'active' as const }),
         select: { unitId: true },
       });
 
@@ -104,8 +110,8 @@ export class MaintenanceRequestsService {
       } as Prisma.InputJsonValue,
     });
 
-    const tenantData = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
+    const tenantData = await this.prisma.tenant.findFirst({
+      where: whereActive({ id: tenantId }),
       select: { name: true, buildingId: true },
     });
 
@@ -117,8 +123,8 @@ export class MaintenanceRequestsService {
       };
     }
 
-    const building = await this.prisma.building.findUnique({
-      where: { id: tenantData.buildingId },
+    const building = await this.prisma.building.findFirst({
+      where: whereActive({ id: tenantData.buildingId }),
       select: { userId: true },
     });
 
@@ -160,11 +166,11 @@ export class MaintenanceRequestsService {
     offset = 0,
     filters?: { status?: string; priority?: string; q?: string },
   ) {
-    const whereClause: Prisma.MaintenanceRequestWhereInput = {
+    const whereClause: Prisma.MaintenanceRequestWhereInput = whereActive({
       buildingId,
       ...(userRole !== 'manager' &&
         userRole !== 'owner' && { tenantId: userId }),
-    };
+    });
     if (
       filters?.status &&
       ['pending', 'in_progress', 'completed', 'cancelled'].includes(
@@ -229,7 +235,7 @@ export class MaintenanceRequestsService {
     userRole?: string,
   ) {
     const request = await this.prisma.maintenanceRequest.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
       include: {
         tenant: {
           select: {
@@ -272,7 +278,7 @@ export class MaintenanceRequestsService {
     dto: UpdateMaintenanceRequestDto,
   ) {
     const request = await this.prisma.maintenanceRequest.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
     });
 
     if (!request) {
@@ -372,7 +378,7 @@ export class MaintenanceRequestsService {
     userRole: string,
   ) {
     const request = await this.prisma.maintenanceRequest.findFirst({
-      where: { id, buildingId },
+      where: whereActive({ id, buildingId }),
       include: {
         tenant: {
           select: { id: true, name: true, email: true },
@@ -384,9 +390,7 @@ export class MaintenanceRequestsService {
       throw new NotFoundException('Maintenance request not found');
     }
 
-    await this.prisma.maintenanceRequest.delete({
-      where: { id },
-    });
+    await this.softDeleteService.softDeleteMaintenanceRequest(id, userId);
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({
@@ -424,8 +428,8 @@ export class MaintenanceRequestsService {
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
     if (userRole === 'manager') {
-      const manager = await this.prisma.manager.findUnique({
-        where: { id: userId },
+      const manager = await this.prisma.manager.findFirst({
+        where: whereActive({ id: userId }),
         select: { name: true },
       });
       return manager?.name || 'Unknown';

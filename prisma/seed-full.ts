@@ -221,19 +221,25 @@ async function main() {
   const ownerForManager = [owner1.id, owner1.id, owner2.id, owner3.id]; // m1,m2 -> owner1; m3 -> owner2; m4 -> owner3
   for (let mi = 0; mi < managersData.length; mi++) {
     const m = managersData[mi];
-    const mgr = await prisma.manager.upsert({
-      where: { email: m.email },
-      update: {},
-      create: {
-        userId: ownerForManager[mi],
-        name: m.name,
-        email: m.email,
-        passwordHash: hashedPassword,
-        phone: m.phone,
-        status: 'active',
-        mustResetPassword: false,
-      },
+    const existing = await prisma.manager.findFirst({
+      where: { email: m.email, deletedAt: null },
     });
+    const mgr = existing
+      ? await prisma.manager.update({
+          where: { id: existing.id },
+          data: {},
+        })
+      : await prisma.manager.create({
+          data: {
+            userId: ownerForManager[mi],
+            name: m.name,
+            email: m.email,
+            passwordHash: hashedPassword,
+            phone: m.phone,
+            status: 'active',
+            mustResetPassword: false,
+          },
+        });
     managers.push({ id: mgr.id, email: mgr.email });
   }
   const [m1, m2, m3, m4] = managers;
@@ -294,20 +300,23 @@ async function main() {
   ];
 
   for (const ra of roleAssignments) {
-    await prisma.managerBuildingRole.upsert({
-      where: {
-        managerId_buildingId: {
+    const existing = await prisma.managerBuildingRole.findFirst({
+      where: { managerId: ra.managerId, buildingId: ra.buildingId, deletedAt: null },
+    });
+    if (existing) {
+      await prisma.managerBuildingRole.update({
+        where: { id: existing.id },
+        data: { roles: ra.roles },
+      });
+    } else {
+      await prisma.managerBuildingRole.create({
+        data: {
           managerId: ra.managerId,
           buildingId: ra.buildingId,
+          roles: ra.roles,
         },
-      },
-      update: { roles: ra.roles },
-      create: {
-        managerId: ra.managerId,
-        buildingId: ra.buildingId,
-        roles: ra.roles,
-      },
-    });
+      });
+    }
   }
   console.log('Manager-building roles assigned.');
 
@@ -340,12 +349,11 @@ async function main() {
     rentPrice: number;
   }[] = [];
   for (const u of unitRows) {
-    const existing = await prisma.unit.findUnique({
+    const existing = await prisma.unit.findFirst({
       where: {
-        buildingId_unitNumber: {
-          buildingId: u.buildingId,
-          unitNumber: u.unitNumber,
-        },
+        buildingId: u.buildingId,
+        unitNumber: u.unitNumber,
+        deletedAt: null,
       },
     });
     if (existing) {
@@ -408,18 +416,24 @@ async function main() {
         'Dina Mohammed',
       ];
       const name = names[(tenantIndex - 1) % names.length] + ` ${tenantIndex}`;
-      const tenant = await prisma.tenant.upsert({
-        where: { buildingId_email: { buildingId: b.id, email } },
-        update: {},
-        create: {
-          buildingId: b.id,
-          name,
-          email,
-          phone: `+25197${String(tenantIndex).padStart(6, '0')}`,
-          passwordHash: hashedPassword,
-          status: 'active',
-        },
+      const existingTenant = await prisma.tenant.findFirst({
+        where: { buildingId: b.id, email, deletedAt: null },
       });
+      const tenant = existingTenant
+        ? await prisma.tenant.update({
+            where: { id: existingTenant.id },
+            data: {},
+          })
+        : await prisma.tenant.create({
+            data: {
+              buildingId: b.id,
+              name,
+              email,
+              phone: `+25197${String(tenantIndex).padStart(6, '0')}`,
+              passwordHash: hashedPassword,
+              status: 'active',
+            },
+          });
       list.push({
         id: tenant.id,
         buildingId: b.id,

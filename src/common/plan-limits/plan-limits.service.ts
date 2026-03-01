@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { whereActive } from '../soft-delete/soft-delete.scope';
 import { PlanFeatures } from '../types/plan-features.interface';
 
 @Injectable()
@@ -11,7 +12,7 @@ export class PlanLimitsService {
     const features = subscription.plan.features as unknown as PlanFeatures;
 
     const currentCount = await this.prisma.building.count({
-      where: { userId, status: 'active' },
+      where: whereActive({ userId, status: 'active' as const }),
     });
 
     if (currentCount >= features.maxBuildings) {
@@ -22,8 +23,8 @@ export class PlanLimitsService {
   }
 
   async canCreateUnit(buildingId: string): Promise<void> {
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
+    const building = await this.prisma.building.findFirst({
+      where: whereActive({ id: buildingId }),
     });
 
     if (!building) {
@@ -34,7 +35,7 @@ export class PlanLimitsService {
     const features = subscription.plan.features as unknown as PlanFeatures;
 
     const currentCount = await this.prisma.unit.count({
-      where: { buildingId, status: { not: 'inactive' } },
+      where: whereActive({ buildingId, status: { not: 'inactive' as const } }),
     });
 
     if (currentCount >= features.maxUnits) {
@@ -49,7 +50,7 @@ export class PlanLimitsService {
     const features = subscription.plan.features as unknown as PlanFeatures;
 
     const currentCount = await this.prisma.manager.count({
-      where: { userId, status: 'active' },
+      where: whereActive({ userId, status: 'active' as const }),
     });
 
     if (currentCount >= features.maxManagers) {
