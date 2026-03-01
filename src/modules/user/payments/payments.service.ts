@@ -35,7 +35,7 @@ export class PaymentsService {
       where: { id: dto.tenantId, buildingId },
       include: {
         leases: {
-          where: { status: 'active' },
+          where: { status: 'active', unitId: dto.unitId },
           orderBy: { startDate: 'desc' },
           take: 1,
         },
@@ -48,7 +48,7 @@ export class PaymentsService {
 
     const activeLease = tenant.leases[0];
     if (!activeLease) {
-      throw new BadRequestException('Tenant has no active lease');
+      throw new BadRequestException('Tenant has no active lease for this unit');
     }
 
     const invoiceNumber = await this.generateInvoiceNumber(buildingId);
