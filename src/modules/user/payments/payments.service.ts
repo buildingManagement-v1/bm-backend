@@ -367,6 +367,24 @@ export class PaymentsService {
       message: `Your payment request (Unit ${request.unit.unitNumber}, ETB ${Number(request.amount).toLocaleString()}) has been approved and recorded.`,
       link: '/tenant/payment-requests',
     });
+
+    const userName = await this.getUserName(userId, userRole);
+    await this.activityLogsService.create({
+      action: 'status_change',
+      entityType: 'payment_request',
+      entityId: requestId,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        status: 'approved',
+        unitNumber: request.unit.unitNumber,
+        amount: Number(request.amount),
+        paymentId: payment.id,
+      } as Prisma.InputJsonValue,
+    });
+
     return payment;
   }
 }

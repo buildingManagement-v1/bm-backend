@@ -9,7 +9,9 @@ import {
 } from './dto';
 import { TokenService } from '../../../common/token/token.service';
 import { EmailService } from '../../../common/email/email.service';
+import { ActivityLogsService } from '../../user/activity-logs/activity-logs.service';
 import { OtpType, UserType } from 'generated/prisma/client';
+import { Prisma } from 'generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -19,6 +21,7 @@ export class TenantAuthService {
     private jwtService: JwtService,
     private tokenService: TokenService,
     private emailService: EmailService,
+    private activityLogsService: ActivityLogsService,
   ) {}
 
   async login(dto: TenantLoginDto) {
@@ -166,6 +169,17 @@ export class TenantAuthService {
         mustResetPassword: false,
         passwordChangedAt: new Date(),
       },
+    });
+
+    await this.activityLogsService.create({
+      action: 'update',
+      entityType: 'tenant',
+      entityId: tenantId,
+      userId: tenantId,
+      userName: tenant.name,
+      userRole: 'tenant',
+      buildingId: tenant.buildingId,
+      details: { type: 'password_change' } as Prisma.InputJsonValue,
     });
 
     return { message: 'Password changed successfully' };

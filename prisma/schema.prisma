@@ -587,6 +587,9 @@ enum ActivityEntityType {
   manager
   invoice
   subscription_plan
+  parking_request
+  payment_request
+  notification
 }
 
 model ActivityLog {

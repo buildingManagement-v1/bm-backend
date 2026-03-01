@@ -4,6 +4,7 @@ import { TenantAuthService } from './auth.service';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { TokenModule } from '../../../common/token/token.module';
 import { EmailModule } from '../../../common/email/email.module';
+import { ActivityLogsModule } from '../../user/activity-logs/activity-logs.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -12,6 +13,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     PrismaModule,
     TokenModule,
     EmailModule,
+    ActivityLogsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

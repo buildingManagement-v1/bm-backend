@@ -7,6 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { SubmitMaintenanceRequestDto } from './dto';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
+import { ActivityLogsService } from 'src/modules/user/activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { buildPageInfo } from 'src/common/pagination';
 import * as fs from 'fs/promises';
@@ -19,6 +20,7 @@ export class PortalService {
     private prisma: PrismaService,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
+    private activityLogsService: ActivityLogsService,
   ) {}
 
   async getProfile(tenantId: string) {
@@ -74,11 +76,13 @@ export class PortalService {
   }
 
   async updateProfile(tenantId: string, body: { email?: string }) {
+    let buildingId: string | undefined;
     if (body.email !== undefined) {
       const current = await this.prisma.tenant.findFirst({
         where: { id: tenantId },
         select: { buildingId: true },
       });
+      buildingId = current?.buildingId;
       if (current) {
         const existing = await this.prisma.tenant.findFirst({
           where: { buildingId: current.buildingId, email: body.email },
@@ -95,11 +99,34 @@ export class PortalService {
       data: {
         ...(body.email !== undefined && { email: body.email }),
       },
-      select: { id: true, name: true, email: true, phone: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        buildingId: true,
+      },
     });
+    if (body.email !== undefined && buildingId) {
+      await this.activityLogsService.create({
+        action: 'update',
+        entityType: 'tenant',
+        entityId: tenant.id,
+        userId: tenantId,
+        userName: tenant.name,
+        userRole: 'tenant',
+        buildingId,
+        details: { type: 'email_change' } as Prisma.InputJsonValue,
+      });
+    }
     return {
       success: true,
-      data: tenant,
+      data: {
+        id: tenant.id,
+        name: tenant.name,
+        email: tenant.email,
+        phone: tenant.phone,
+      },
       message: 'Profile updated successfully',
     };
   }
@@ -377,6 +404,21 @@ export class PortalService {
       `/dashboard/payment-requests?building=${tenant.buildingId}`,
     );
 
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'payment_request',
+      entityId: request.id,
+      userId: tenantId,
+      userName: request.tenant.name,
+      userRole: 'tenant',
+      buildingId: tenant.buildingId,
+      details: {
+        amount: Number(body.amount),
+        type: body.type,
+        unitNumber: request.unit.unitNumber,
+      } as Prisma.InputJsonValue,
+    });
+
     return {
       success: true,
       data: request,
@@ -605,6 +647,20 @@ export class PortalService {
       `${request.tenant.name} requested parking for ${licensePlate} (Unit ${request.unit.unitNumber})`,
       `/dashboard/parking-requests?building=${lease.buildingId}`,
     );
+
+    await this.activityLogsService.create({
+      action: 'create',
+      entityType: 'parking_request',
+      entityId: request.id,
+      userId: tenantId,
+      userName: request.tenant.name,
+      userRole: 'tenant',
+      buildingId: lease.buildingId,
+      details: {
+        licensePlate,
+        unitNumber: request.unit.unitNumber,
+      } as Prisma.InputJsonValue,
+    });
 
     return {
       success: true,

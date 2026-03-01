@@ -9,6 +9,7 @@ import { Prisma } from 'generated/prisma/client';
 import { CreateParkingRegistrationDto } from './dto';
 import { buildPageInfo } from 'src/common/pagination';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 const registrationInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -21,7 +22,21 @@ export class ParkingService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private activityLogsService: ActivityLogsService,
   ) {}
+
+  private async getActorName(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    if (user?.name) return user.name;
+    const manager = await this.prisma.manager.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return manager?.name ?? 'Unknown';
+  }
 
   private normalizeLicensePlate(plate: string): string {
     return plate.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -208,6 +223,29 @@ export class ParkingService {
       message: `Your parking request for ${licensePlate} (Unit ${request.unit.unitNumber}) has been approved. Your vehicle is now registered.`,
       link: '/tenant/parking-requests',
     });
+
+    const userName = await this.getActorName(userId);
+    const userRole = (await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    }))
+      ? 'owner'
+      : 'manager';
+    await this.activityLogsService.create({
+      action: 'status_change',
+      entityType: 'parking_request',
+      entityId: requestId,
+      userId,
+      userName,
+      userRole,
+      buildingId: request.buildingId,
+      details: {
+        status: 'approved',
+        licensePlate,
+        unitNumber: request.unit.unitNumber,
+      } as Prisma.InputJsonValue,
+    });
+
     return registration;
   }
 }

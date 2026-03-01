@@ -7,6 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationType, Prisma } from 'generated/prisma/client';
 import { buildPageInfo } from 'src/common/pagination';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 const requestInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -18,7 +19,21 @@ export class ParkingRequestsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private activityLogsService: ActivityLogsService,
   ) {}
+
+  private async getActorName(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    if (user?.name) return user.name;
+    const manager = await this.prisma.manager.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    return manager?.name ?? 'Unknown';
+  }
 
   async findAll(
     buildingId: string,
@@ -102,6 +117,30 @@ export class ParkingRequestsService {
       message: `Your parking request (Unit ${request.unit.unitNumber}, ${request.licensePlate}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
       link: '/tenant/parking-requests',
     });
+
+    const userName = await this.getActorName(userId);
+    const userRole = (await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    }))
+      ? 'owner'
+      : 'manager';
+    await this.activityLogsService.create({
+      action: 'status_change',
+      entityType: 'parking_request',
+      entityId: id,
+      userId,
+      userName,
+      userRole,
+      buildingId,
+      details: {
+        status: 'rejected',
+        licensePlate: request.licensePlate,
+        unitNumber: request.unit.unitNumber,
+        rejectionReason: rejectionReason ?? undefined,
+      } as Prisma.InputJsonValue,
+    });
+
     return { success: true };
   }
 }
