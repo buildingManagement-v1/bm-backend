@@ -22,12 +22,14 @@ export class UserSubscriptionsController {
   ) {}
 
   @Get('my-subscription')
-  @ApiOperation({ summary: 'Get current user active subscription' })
-  @ApiResponse({ status: 200, description: 'Return user active subscription' })
+  @ApiOperation({ summary: 'Get current user active subscription and usage' })
+  @ApiResponse({ status: 200, description: 'Return user active subscription and usage stats' })
   async getMySubscription(@User() user: { id: string; email: string }) {
-    const result = await this.subscriptionsService.findAll(user.id);
+    const [result, usage] = await Promise.all([
+      this.subscriptionsService.findAll(user.id),
+      this.subscriptionsService.getUsageForUser(user.id),
+    ]);
 
-    // Return only the active subscription
     const activeSubscription = result.data.find(
       (sub) => sub.status === 'active',
     );
@@ -35,6 +37,7 @@ export class UserSubscriptionsController {
     return {
       success: true,
       data: activeSubscription || null,
+      usage,
     };
   }
 

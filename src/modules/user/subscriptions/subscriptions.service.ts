@@ -9,6 +9,7 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { Prisma } from 'generated/prisma/client';
 import { PdfService } from 'src/common/pdf/pdf.service';
 import { EmailService } from 'src/common/email/email.service';
+import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
 @Injectable()
 export class SubscriptionsService {
@@ -147,6 +148,42 @@ export class SubscriptionsService {
       success: true,
       data: subscriptions,
     };
+  }
+
+  /**
+   * Get usage counts for an owner (buildings, units, managers) for subscription display.
+   */
+  async getUsageForUser(userId: string): Promise<{
+    buildingsUsed: number;
+    unitsUsed: number;
+    managersUsed: number;
+  }> {
+    const [buildingsUsed, managersUsed, buildingIds] = await Promise.all([
+      this.prisma.building.count({
+        where: whereActive({ userId, status: 'active' as const }),
+      }),
+      this.prisma.manager.count({
+        where: whereActive({ userId, status: 'active' as const }),
+      }),
+      this.prisma.building
+        .findMany({
+          where: whereActive({ userId, status: 'active' as const }),
+          select: { id: true },
+        })
+        .then((rows) => rows.map((r) => r.id)),
+    ]);
+
+    const unitsUsed =
+      buildingIds.length > 0
+        ? await this.prisma.unit.count({
+            where: whereActive({
+              buildingId: { in: buildingIds },
+              status: { not: 'inactive' as const },
+            }),
+          })
+        : 0;
+
+    return { buildingsUsed, unitsUsed, managersUsed };
   }
 
   async findAllSubscriptions() {

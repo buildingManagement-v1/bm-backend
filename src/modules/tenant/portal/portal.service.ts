@@ -161,7 +161,7 @@ export class PortalService {
 
   async getPaymentHistory(tenantId: string, limit = 20, offset = 0) {
     const where = { tenantId };
-    const [totalCount, data] = await Promise.all([
+    const [totalCount, rows] = await Promise.all([
       this.prisma.payment.count({ where }),
       this.prisma.payment.findMany({
         where,
@@ -170,6 +170,7 @@ export class PortalService {
             select: {
               id: true,
               unitNumber: true,
+              floor: true,
             },
           },
           invoice: {
@@ -184,6 +185,33 @@ export class PortalService {
         skip: offset,
       }),
     ]);
+
+    // If unit relation is null (e.g. unit soft-deleted) but unitId is set, fetch unit for display
+    const unitIdsToResolve = rows
+      .filter((p) => p.unitId && !p.unit)
+      .map((p) => p.unitId as string);
+    const unitsMap = new Map<
+      string,
+      { id: string; unitNumber: string; floor: number | null }
+    >();
+    if (unitIdsToResolve.length > 0) {
+      const units = await this.prisma.unit.findMany({
+        where: { id: { in: [...new Set(unitIdsToResolve)] } },
+        select: { id: true, unitNumber: true, floor: true },
+      });
+      for (const u of units) {
+        unitsMap.set(u.id, {
+          id: u.id,
+          unitNumber: u.unitNumber,
+          floor: u.floor,
+        });
+      }
+    }
+    const data = rows.map((p) => {
+      if (p.unit) return p;
+      const resolved = p.unitId ? unitsMap.get(p.unitId) : undefined;
+      return resolved ? { ...p, unit: resolved } : p;
+    });
 
     const page_info = buildPageInfo(limit, offset, totalCount);
     return {
@@ -589,10 +617,7 @@ export class PortalService {
     let paidAmount = 0;
     let unpaidAmount = 0;
     let overdueAmount = 0;
-    const byMonth = new Map<
-      string,
-      { due: number; paid: number }
-    >();
+    const byMonth = new Map<string, { due: number; paid: number }>();
 
     for (const p of periods) {
       const amount = Number(p.rentAmount);

@@ -15,6 +15,9 @@ import { buildPageInfo } from 'src/common/pagination';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
+  unit: {
+    select: { id: true, unitNumber: true, floor: true },
+  },
   invoice: { select: { id: true, invoiceNumber: true } },
 } satisfies Prisma.PaymentInclude;
 
@@ -218,7 +221,7 @@ export class PaymentsService {
         name: { contains: filters.q.trim(), mode: 'insensitive' },
       };
     }
-    const [totalCount, data] = await Promise.all([
+    const [totalCount, rows] = await Promise.all([
       this.prisma.payment.count({ where }),
       this.prisma.payment.findMany({
         where,
@@ -228,6 +231,34 @@ export class PaymentsService {
         skip: offset,
       }),
     ]);
+
+    // If unit relation is null (e.g. unit soft-deleted) but unitId is set, fetch unit for display
+    const unitIdsToResolve = rows
+      .filter((p) => p.unitId && !p.unit)
+      .map((p) => p.unitId as string);
+    const unitsMap = new Map<
+      string,
+      { id: string; unitNumber: string; floor: number | null }
+    >();
+    if (unitIdsToResolve.length > 0) {
+      const units = await this.prisma.unit.findMany({
+        where: { id: { in: [...new Set(unitIdsToResolve)] } },
+        select: { id: true, unitNumber: true, floor: true },
+      });
+      for (const u of units) {
+        unitsMap.set(u.id, {
+          id: u.id,
+          unitNumber: u.unitNumber,
+          floor: u.floor,
+        });
+      }
+    }
+    const data = rows.map((p) => {
+      if (p.unit) return p;
+      const resolved = p.unitId ? unitsMap.get(p.unitId) : undefined;
+      return resolved ? { ...p, unit: resolved } : p;
+    });
+
     const page_info = buildPageInfo(limit, offset, totalCount);
     return { data, meta: { page_info } };
   }
