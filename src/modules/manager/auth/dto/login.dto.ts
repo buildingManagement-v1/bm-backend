@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginManagerDto {
   @ApiProperty({ example: 'manager@example.com' })
@@ -10,4 +10,9 @@ export class LoginManagerDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  @ApiProperty({ required: false, description: 'When true, refresh token lasts 30 days; when false, 24 hours (session)' })
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }

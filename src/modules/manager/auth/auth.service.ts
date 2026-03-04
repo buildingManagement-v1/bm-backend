@@ -83,7 +83,8 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const refreshExpiry = dto.rememberMe === false ? '24h' : '30d';
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: refreshExpiry });
 
     return {
       accessToken,

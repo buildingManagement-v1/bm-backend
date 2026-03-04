@@ -150,7 +150,7 @@ export class MaintenanceRequestsService {
           type: 'maintenance_request_created',
           title: 'New Maintenance Request',
           message: `${tenantData.name} submitted a maintenance request: ${request.title}`,
-          link: `/dashboard/maintenance?building=${tenantData.buildingId}`,
+          link: `/dashboard/maintenance-requests?building=${tenantData.buildingId}`,
         });
       }
     }

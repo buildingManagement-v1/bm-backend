@@ -287,7 +287,7 @@ export class PortalService {
           type: 'maintenance_request_created',
           title: 'New Maintenance Request',
           message: `${tenant.name} submitted: ${request.title}`,
-          link: `/dashboard/maintenance?building=${tenant.buildingId}`,
+          link: `/dashboard/maintenance-requests?building=${tenant.buildingId}`,
         });
       }
     }
