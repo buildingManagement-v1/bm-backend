@@ -1,11 +1,18 @@
-import { Controller, Post, Body, Res, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import type { Response, Request } from 'express';
+import type { Request } from 'express';
 import { TenantAuthService } from './auth.service';
 import {
   TenantLoginDto,
@@ -30,24 +37,17 @@ export class TenantAuthController {
   @Post('login')
   @ApiOperation({ summary: 'Tenant login' })
   @ApiResponse({ status: 200, description: 'Login successful' })
-  async login(@Body() dto: TenantLoginDto, @Res() res: Response) {
+  async login(@Body() dto: TenantLoginDto) {
     const result = await this.authService.login(dto);
-
-    res.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    return res.json({
+    return {
       success: true,
       data: {
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
         tenant: result.tenant,
         mustResetPassword: result.mustResetPassword,
       },
-    });
+    };
   }
 
   @Post('request-otp')
@@ -91,21 +91,18 @@ export class TenantAuthController {
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
-  async refresh(@Req() req: RequestWithCookies, @Res() res: Response) {
-    const refreshToken = req.cookies?.refreshToken;
-
-    if (!refreshToken) {
-      return res.status(401).json({
-        success: false,
-        message: 'Refresh token not found',
-      });
+  async refresh(
+    @Body() body: { refreshToken?: string },
+    @Req() req: RequestWithCookies,
+  ) {
+    const token = body?.refreshToken ?? req.cookies?.refreshToken;
+    if (!token) {
+      throw new UnauthorizedException('Refresh token not found');
     }
-
-    const result = await this.authService.refresh(refreshToken);
-
-    return res.json({
+    const result = await this.authService.refresh(token);
+    return {
       success: true,
       data: result,
-    });
+    };
   }
 }
