@@ -254,6 +254,15 @@ export class TenantsService {
       throw new NotFoundException('Tenant not found');
     }
 
+    const activeLeaseCount = await this.prisma.lease.count({
+      where: whereActive({ tenantId: id, status: 'active' as const }),
+    });
+    if (activeLeaseCount > 0) {
+      throw new ConflictException(
+        'Cannot delete tenant with an active lease. End or remove the lease first.',
+      );
+    }
+
     await this.softDeleteService.softDeleteTenant(id, userId);
 
     const userName = await this.getUserName(userId, userRole);

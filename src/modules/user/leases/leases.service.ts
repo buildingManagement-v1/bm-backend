@@ -239,6 +239,12 @@ export class LeasesService {
       throw new NotFoundException('Lease not found');
     }
 
+    if (lease.status === 'active') {
+      throw new ConflictException(
+        'Cannot delete an active lease. End the lease first, then you can remove it.',
+      );
+    }
+
     await this.softDeleteService.softDeleteLease(id, userId);
 
     const userName = await this.getUserName(userId, userRole);
