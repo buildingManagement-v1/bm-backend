@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
   Injectable,
   NotFoundException,
@@ -40,14 +41,14 @@ export class TenantsService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password: _password, ...tenantData } = dto;
+    const temporaryPassword = this.generateTemporaryPassword(10);
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
 
     const tenant = await this.prisma.tenant.create({
       data: {
-        ...tenantData,
+        name: dto.name,
+        email: dto.email,
+        phone: dto.phone,
         buildingId,
         passwordHash,
         status: 'inactive',
@@ -78,6 +79,7 @@ export class TenantsService {
       tenant.email,
       tenant.name,
       building?.name || 'Your Building',
+      temporaryPassword,
     );
 
     return {
@@ -90,6 +92,19 @@ export class TenantsService {
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     };
+  }
+
+  private generateTemporaryPassword(length: number): string {
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const all = lower + upper + digits;
+    const bytes = randomBytes(length);
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += all[bytes[i] % all.length];
+    }
+    return result;
   }
 
   async findAll(
@@ -312,14 +327,11 @@ export class TenantsService {
       throw new ConflictException('Lease end date must be after start date');
     }
 
+    const plainPassword = dto.password ?? this.generateTemporaryPassword(10);
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
     // Create everything in a transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // Hash password if provided
-      let passwordHash: string | undefined;
-      if (dto.password) {
-        passwordHash = await bcrypt.hash(dto.password, 10);
-      }
-
       // 1. Create tenant
       const tenant = await tx.tenant.create({
         data: {
@@ -404,6 +416,7 @@ export class TenantsService {
       result.tenant.email,
       result.tenant.name,
       building?.name || 'Your Building',
+      plainPassword,
     );
 
     await this.emailService.sendLeaseCreatedEmail(

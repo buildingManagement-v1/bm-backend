@@ -3,7 +3,6 @@ import {
   IsEmail,
   IsNotEmpty,
   IsString,
-  MinLength,
   IsArray,
   IsUUID,
   ValidateNested,
@@ -30,11 +29,6 @@ export class CreateManagerDto {
   @ApiProperty({ example: 'john.doe@example.com' })
   @IsEmail()
   email: string;
-
-  @ApiProperty({ example: 'Password123!', minLength: 8 })
-  @IsString()
-  @MinLength(8)
-  password: string;
 
   @ApiProperty({ example: '+1234567890' })
   @IsString()

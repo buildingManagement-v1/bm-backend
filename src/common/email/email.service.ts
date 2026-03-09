@@ -45,6 +45,7 @@ export class EmailService {
     name: string,
     temporaryPassword: string,
   ) {
+    console.log('Temporary password', temporaryPassword);
     await this.resend.emails.send({
       from: 'BMS <onboarding@resend.dev>',
       to: email,
@@ -129,15 +130,47 @@ export class EmailService {
     email: string,
     name: string,
     buildingName: string,
+    temporaryPassword: string,
   ) {
+    console.log('Temporary password', temporaryPassword);
+
+    const loginUrl = `${this.configService.get('FRONTEND_URL')}/login?type=tenant`;
     await this.resend.emails.send({
       from: 'BMS <onboarding@resend.dev>',
       to: email,
       subject: 'Welcome to Your Tenant Portal',
       html: `
-        <h1>Welcome ${name}!</h1>
-        <p>Your tenant account has been created for ${buildingName}.</p>
-        <p>You can now log in to access your tenant portal.</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="border-bottom: 3px solid #3B82F6; padding-bottom: 20px; margin-bottom: 30px;">
+            <h1 style="color: #111827; font-size: 28px; font-weight: 600; margin: 0;">Welcome to Your Tenant Portal</h1>
+          </div>
+          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">Hi ${name},</p>
+          <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+            Your tenant account has been created for <strong>${buildingName}</strong>. You can log in with the credentials below.
+          </p>
+          <div style="background-color: #F3F4F6; border-left: 4px solid #3B82F6; border-radius: 6px; padding: 24px; margin-bottom: 30px;">
+            <h2 style="color: #111827; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">Your Login Credentials</h2>
+            <div style="margin-bottom: 12px;">
+              <span style="color: #6B7280; font-size: 14px; display: block; margin-bottom: 4px;">Email</span>
+              <span style="color: #111827; font-size: 16px; font-weight: 500;">${email}</span>
+            </div>
+            <div>
+              <span style="color: #6B7280; font-size: 14px; display: block; margin-bottom: 4px;">Temporary Password</span>
+              <code style="background-color: #FFFFFF; color: #111827; padding: 8px 12px; border-radius: 4px; font-size: 16px; font-family: 'Courier New', monospace; display: inline-block;">${temporaryPassword}</code>
+            </div>
+          </div>
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${loginUrl}" style="background-color: #3B82F6; color: #FFFFFF; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-size: 16px; font-weight: 600; display: inline-block;">Log in to Tenant Portal</a>
+          </div>
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 16px; margin-bottom: 30px;">
+            <p style="color: #92400E; font-size: 14px; margin: 0; line-height: 1.5;">
+              <strong>Important:</strong> Please change your password after your first login for security.
+            </p>
+          </div>
+          <div style="border-top: 1px solid #E5E7EB; padding-top: 24px; margin-top: 40px;">
+            <p style="color: #9CA3AF; font-size: 14px; line-height: 1.6; margin: 0;">Building Management System</p>
+          </div>
+        </div>
       `,
     });
   }

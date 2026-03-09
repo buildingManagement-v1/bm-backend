@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
   Injectable,
   NotFoundException,
@@ -52,7 +53,8 @@ export class ManagersService {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const temporaryPassword = this.generateTemporaryPassword(12);
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     // Create manager with building assignments
     const manager = await this.prisma.manager.create({
@@ -109,7 +111,7 @@ export class ManagersService {
     await this.emailService.sendManagerCreatedEmail(
       manager.email,
       manager.name,
-      dto.password,
+      temporaryPassword,
     );
 
     return {
@@ -403,5 +405,18 @@ export class ManagersService {
     await this.softDeleteService.softDeleteManager(managerId, userId);
 
     return { message: 'Manager deleted successfully' };
+  }
+
+  private generateTemporaryPassword(length: number): string {
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const all = lower + upper + digits;
+    const bytes = randomBytes(length);
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += all[bytes[i]! % all.length];
+    }
+    return result;
   }
 }
