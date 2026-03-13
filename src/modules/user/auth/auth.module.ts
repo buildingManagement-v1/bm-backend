@@ -3,6 +3,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { DeviceTokenModule } from '../../../common/device-token/device-token.module';
+import { AppDeviceTokenController } from './device-token.controller';
 
 @Module({
   imports: [
@@ -13,8 +15,9 @@ import { AuthController } from './auth.controller';
         signOptions: { expiresIn: '15m' },
       }),
     }),
+    DeviceTokenModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AppDeviceTokenController],
   providers: [AuthService],
 })
 export class AuthModule {}

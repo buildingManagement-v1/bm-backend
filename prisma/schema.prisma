@@ -735,3 +735,22 @@ model Notification {
   @@index([createdAt])
   @@map("notifications")
 }
+
+enum PushPlatform {
+  ios
+  android
+}
+
+model DeviceToken {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  userType  UserType       @map("user_type")
+  token     String
+  platform  PushPlatform
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@unique([userId, userType, token])
+  @@index([userId, userType])
+  @@map("device_tokens")
+}

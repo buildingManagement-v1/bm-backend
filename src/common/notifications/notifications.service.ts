@@ -4,6 +4,7 @@ import { CreateNotificationDto, QueryNotificationsDto } from './dto';
 import { UserType } from 'generated/prisma/client';
 import { buildPageInfo } from '../pagination';
 import { ActivityLogsService } from '../../modules/user/activity-logs/activity-logs.service';
+import { PushNotificationService } from '../firebase/push-notification.service';
 import { Prisma } from 'generated/prisma/client';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private activityLogsService: ActivityLogsService,
+    private pushNotificationService: PushNotificationService,
   ) {}
 
   private async getBuildingIdAndActor(
@@ -67,9 +69,17 @@ export class NotificationsService {
   }
 
   async create(dto: CreateNotificationDto) {
-    return await this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: dto,
     });
+    const data: Record<string, string> = {
+      type: String(dto.type),
+      ...(dto.link && { link: dto.link }),
+    };
+    this.pushNotificationService
+      .sendToUser(dto.userId, dto.userType, dto.title, dto.message, data)
+      .catch(() => {});
+    return notification;
   }
 
   async findAll(

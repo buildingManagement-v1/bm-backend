@@ -7,6 +7,8 @@ import { EmailModule } from '../../../common/email/email.module';
 import { ActivityLogsModule } from '../../user/activity-logs/activity-logs.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { DeviceTokenModule } from '../../../common/device-token/device-token.module';
+import { TenantDeviceTokenController } from './device-token.controller';
 
 @Module({
   imports: [
@@ -14,6 +16,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     TokenModule,
     EmailModule,
     ActivityLogsModule,
+    DeviceTokenModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
@@ -23,7 +26,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
     }),
   ],
-  controllers: [TenantAuthController],
+  controllers: [TenantAuthController, TenantDeviceTokenController],
   providers: [TenantAuthService],
 })
 export class TenantAuthModule {}
