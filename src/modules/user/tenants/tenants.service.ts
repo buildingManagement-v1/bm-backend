@@ -15,6 +15,7 @@ import { EmailService } from 'src/common/email/email.service';
 import { buildPageInfo } from 'src/common/pagination';
 import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
 import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
+import { getRentalPeriodsBetween } from 'src/common/date/rental-periods.util';
 
 @Injectable()
 export class TenantsService {
@@ -373,18 +374,12 @@ export class TenantsService {
         },
       });
 
-      // 4. Generate payment periods
-      const periods: { month: string; rentAmount: number }[] = [];
-      const current = new Date(startDate);
-
-      while (current <= endDate) {
-        const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
-        periods.push({
-          month: monthKey,
-          rentAmount: dto.rentAmount,
-        });
-        current.setMonth(current.getMonth() + 1);
-      }
+      // 4. Generate payment periods (rental months, not calendar months)
+      const periods = getRentalPeriodsBetween(
+        startDate,
+        endDate,
+        dto.rentAmount,
+      );
 
       await tx.paymentPeriod.createMany({
         data: periods.map((p) => ({

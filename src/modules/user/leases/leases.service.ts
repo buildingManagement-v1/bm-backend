@@ -11,6 +11,7 @@ import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
 import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
 import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
+import { getRentalPeriodsBetween } from 'src/common/date/rental-periods.util';
 
 const leaseInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -103,17 +104,16 @@ export class LeasesService {
         data: { status: 'active' },
       });
 
-      // Generate payment periods
-      const months = this.generateMonthsBetween(
-        new Date(dto.startDate),
-        new Date(dto.endDate),
-      );
+      // Generate payment periods (rental months, not calendar months)
+      const start = new Date(dto.startDate);
+      const end = new Date(dto.endDate);
+      const periods = getRentalPeriodsBetween(start, end, dto.rentAmount);
 
       await tx.paymentPeriod.createMany({
-        data: months.map((month) => ({
+        data: periods.map((p) => ({
           leaseId: newLease.id,
-          month,
-          rentAmount: dto.rentAmount,
+          month: p.month,
+          rentAmount: p.rentAmount,
           status: 'unpaid' as const,
         })),
       });
@@ -263,21 +263,6 @@ export class LeasesService {
     });
 
     return { message: 'Lease deleted successfully' };
-  }
-
-  private generateMonthsBetween(start: Date, end: Date): string[] {
-    const months: string[] = [];
-    const current = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endDate = new Date(end.getFullYear(), end.getMonth(), 1);
-
-    while (current <= endDate) {
-      const year = current.getFullYear();
-      const month = String(current.getMonth() + 1).padStart(2, '0');
-      months.push(`${year}-${month}`);
-      current.setMonth(current.getMonth() + 1);
-    }
-
-    return months;
   }
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
