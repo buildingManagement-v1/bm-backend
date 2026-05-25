@@ -254,6 +254,7 @@ model Tenant {
   name                         String
   email                        String
   phone                        String?
+  tin                          String?       @map("tin")
   passwordHash                 String?       @map("password_hash")
   status                       TenantStatus  @default(inactive)
   mustResetPassword            Boolean       @default(false) @map("must_reset_password")

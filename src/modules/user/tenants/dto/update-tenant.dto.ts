@@ -18,6 +18,11 @@ export class UpdateTenantDto {
   @IsString()
   phone?: string;
 
+  @ApiProperty({ example: '0000000000', required: false })
+  @IsOptional()
+  @IsString()
+  tin?: string;
+
   @ApiProperty({
     enum: TenantStatus,
     example: TenantStatus['active'],

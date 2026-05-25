@@ -23,6 +23,11 @@ export class OnboardTenantDto {
   @IsString()
   phone?: string;
 
+  @ApiProperty({ example: '0000000000', required: false })
+  @IsOptional()
+  @IsString()
+  tin?: string;
+
   @ApiProperty({ example: 'password123', required: false })
   @IsOptional()
   @IsString()
