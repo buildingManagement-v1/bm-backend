@@ -585,8 +585,11 @@ enum PaymentPeriodStatus {
 model PaymentPeriod {
   id           String   @id @default(uuid())
   leaseId      String
-  month        String   // Format: YYYY-MM
+  month        String   // YYYY-MM for legacy; YYYY-MM-DD (periodStart date) for cycle-based
   rentAmount   Decimal  @db.Decimal(10, 2)
+  periodStart  DateTime? @map("period_start")
+  periodEnd    DateTime? @map("period_end")
+  daysInCycle  Int?      @map("days_in_cycle")
   status       PaymentPeriodStatus @default(unpaid)
   paidAt       DateTime?
   paymentId    String?

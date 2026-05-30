@@ -182,6 +182,26 @@ export class SchedulerService {
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async markOverduePaymentPeriods() {
+    this.logger.log('Marking overdue payment periods...');
+    const now = new Date();
+    // Legacy periods (no periodEnd) use month string comparison
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const result = await this.prisma.paymentPeriod.updateMany({
+      where: {
+        status: 'unpaid',
+        OR: [
+          { periodEnd: { lt: now } },
+          { periodEnd: null, month: { lt: currentMonthStr } },
+        ],
+      },
+      data: { status: 'overdue' },
+    });
+    this.logger.log(`Marked ${result.count} payment period(s) as overdue`);
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async checkExpiredLeases() {
     this.logger.log('Checking for expired leases...');
 

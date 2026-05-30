@@ -131,17 +131,23 @@ export class LeasesService {
         data: { status: 'active' },
       });
 
-      // Generate payment periods
-      const months = this.generateMonthsBetween(
+      // Generate cycle-based payment periods
+      const paymentDay = newLease.paymentCollectionDay ?? 1;
+      const cycles = this.generateCycles(
         new Date(dto.startDate),
         new Date(dto.endDate),
+        paymentDay,
+        dto.rentAmount,
       );
 
       await tx.paymentPeriod.createMany({
-        data: months.map((month) => ({
+        data: cycles.map((c) => ({
           leaseId: newLease.id,
-          month,
-          rentAmount: dto.rentAmount,
+          month: c.month,
+          periodStart: c.periodStart,
+          periodEnd: c.periodEnd,
+          daysInCycle: c.daysInCycle,
+          rentAmount: c.rentAmount,
           status: 'unpaid' as const,
         })),
       });
@@ -327,19 +333,88 @@ export class LeasesService {
     return { message: 'Lease deleted successfully' };
   }
 
-  private generateMonthsBetween(start: Date, end: Date): string[] {
-    const months: string[] = [];
-    const current = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endDate = new Date(end.getFullYear(), end.getMonth(), 1);
+  private generateCycles(
+    startDate: Date,
+    endDate: Date,
+    paymentDay: number,
+    monthlyRent: number,
+  ): Array<{
+    month: string;
+    periodStart: Date;
+    periodEnd: Date;
+    daysInCycle: number;
+    rentAmount: number;
+  }> {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-    while (current <= endDate) {
-      const year = current.getFullYear();
-      const month = String(current.getMonth() + 1).padStart(2, '0');
-      months.push(`${year}-${month}`);
-      current.setMonth(current.getMonth() + 1);
+    const toUTC = (d: Date) =>
+      new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+
+    const end = toUTC(endDate);
+    let cursor = toUTC(startDate);
+    const cycles: Array<{
+      month: string;
+      periodStart: Date;
+      periodEnd: Date;
+      daysInCycle: number;
+      rentAmount: number;
+    }> = [];
+
+    while (cursor <= end) {
+      // Next occurrence of paymentDay strictly after cursor
+      const lookFrom = new Date(cursor.getTime() + MS_PER_DAY);
+      let nextPaymentDate: Date;
+      if (lookFrom.getUTCDate() <= paymentDay) {
+        nextPaymentDate = new Date(
+          Date.UTC(
+            lookFrom.getUTCFullYear(),
+            lookFrom.getUTCMonth(),
+            paymentDay,
+          ),
+        );
+      } else {
+        nextPaymentDate = new Date(
+          Date.UTC(
+            lookFrom.getUTCFullYear(),
+            lookFrom.getUTCMonth() + 1,
+            paymentDay,
+          ),
+        );
+      }
+
+      const dayBeforeNext = new Date(nextPaymentDate.getTime() - MS_PER_DAY);
+      const cycleEnd =
+        dayBeforeNext <= end ? dayBeforeNext : new Date(end.getTime());
+
+      const daysInCycle =
+        Math.round((cycleEnd.getTime() - cursor.getTime()) / MS_PER_DAY) + 1;
+
+      // Full cycle: starts exactly on paymentDay and wasn't truncated by endDate
+      const isFullCycle =
+        cursor.getUTCDate() === paymentDay &&
+        cycleEnd.getTime() === dayBeforeNext.getTime();
+
+      const rentAmount = isFullCycle
+        ? Number(monthlyRent)
+        : Math.round((Number(monthlyRent) / 30) * daysInCycle * 100) / 100;
+
+      // Use periodStart ISO date as month key — always unique per lease
+      const y = cursor.getUTCFullYear();
+      const m = String(cursor.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(cursor.getUTCDate()).padStart(2, '0');
+
+      cycles.push({
+        month: `${y}-${m}-${d}`,
+        periodStart: new Date(cursor.getTime()),
+        periodEnd: new Date(cycleEnd.getTime()),
+        daysInCycle,
+        rentAmount,
+      });
+
+      cursor = new Date(cycleEnd.getTime() + MS_PER_DAY);
     }
 
-    return months;
+    return cycles;
   }
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
