@@ -188,8 +188,13 @@ export class PortalController {
   }
 
   @Get('dashboard-stats')
-  @ApiOperation({ summary: 'Get dashboard stats for charts (payment summary + recent months)' })
-  @ApiResponse({ status: 200, description: 'Return payment summary and recent months' })
+  @ApiOperation({
+    summary: 'Get dashboard stats for charts (payment summary + recent months)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Return payment summary and recent months',
+  })
   async getDashboardStats(@User() user: { id: string }) {
     const data = await this.portalService.getDashboardStats(user.id);
     return { success: true, data };

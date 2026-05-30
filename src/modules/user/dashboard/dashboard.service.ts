@@ -141,7 +141,10 @@ export class DashboardService {
       });
 
       const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      const label = d.toLocaleDateString('en-US', {
+        month: 'short',
+        year: '2-digit',
+      });
       result.push({
         month: monthStr,
         label,

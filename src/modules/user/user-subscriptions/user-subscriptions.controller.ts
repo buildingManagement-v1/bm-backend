@@ -23,7 +23,10 @@ export class UserSubscriptionsController {
 
   @Get('my-subscription')
   @ApiOperation({ summary: 'Get current user active subscription and usage' })
-  @ApiResponse({ status: 200, description: 'Return user active subscription and usage stats' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return user active subscription and usage stats',
+  })
   async getMySubscription(@User() user: { id: string; email: string }) {
     const [result, usage] = await Promise.all([
       this.subscriptionsService.findAll(user.id),

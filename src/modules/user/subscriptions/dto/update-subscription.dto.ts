@@ -9,7 +9,6 @@ export class UpdateSubscriptionDto {
     required: false,
   })
   @IsOptional()
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
 }

@@ -415,7 +415,7 @@ export class ManagersService {
     const bytes = randomBytes(length);
     let result = '';
     for (let i = 0; i < length; i++) {
-      result += all[bytes[i]! % all.length];
+      result += all[bytes[i] % all.length];
     }
     return result;
   }

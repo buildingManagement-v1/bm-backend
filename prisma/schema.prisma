@@ -156,7 +156,11 @@ model Building {
   contactPhone     String?     @map("contact_phone")
   logoUrl          String?     @map("logo_url")
   settings         Json?
-  status           UserStatus  @default(active)
+  vatRate              Decimal?    @map("vat_rate")
+  withholdingRate      Decimal?    @map("withholding_rate")
+  paymentCollectionDay Int?        @map("payment_collection_day")
+  totalParkingLots     Int         @default(0) @map("total_parking_lots")
+  status               UserStatus  @default(active)
   deletedAt        DateTime?   @map("deleted_at")
   deletedById      String?      @map("deleted_by_id")
   createdAt        DateTime    @default(now()) @map("created_at")
@@ -294,10 +298,12 @@ model Lease {
   endDate         DateTime      @map("end_date")
   rentAmount      Decimal       @map("rent_amount")
   securityDeposit Decimal?      @map("security_deposit")
-  carsAllowed     Int           @default(0) @map("cars_allowed")
-  status          LeaseStatus   @default(active)
-  terms           Json?
-  deletedAt       DateTime?     @map("deleted_at")
+  carsAllowed      Int           @default(0) @map("cars_allowed")
+  applyVat         Boolean       @default(false) @map("apply_vat")
+  applyWithholding Boolean       @default(false) @map("apply_withholding")
+  status           LeaseStatus   @default(active)
+  terms            Json?
+  deletedAt        DateTime?     @map("deleted_at")
   deletedById     String?       @map("deleted_by_id")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
@@ -471,13 +477,16 @@ model Payment {
   unitId          String?       @map("unit_id")
   tenantId        String        @map("tenant_id")
   invoiceId       String?       @map("invoice_id")
-  amount          Decimal
-  type            PaymentType
-  status          PaymentStatus @default(pending)
-  paymentDate     DateTime      @map("payment_date")
-  notes           String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  amount            Decimal
+  baseAmount        Decimal?      @map("base_amount")
+  vatAmount         Decimal?      @map("vat_amount")
+  withholdingAmount Decimal?      @map("withholding_amount")
+  type              PaymentType
+  status            PaymentStatus @default(pending)
+  paymentDate       DateTime      @map("payment_date")
+  notes             String?
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
   building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   unit            Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)

@@ -5,6 +5,10 @@ import {
   IsEmail,
   IsObject,
   IsEnum,
+  IsNumber,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 import { UserStatus } from 'generated/prisma/client';
 
@@ -57,4 +61,47 @@ export class UpdateBuildingDto {
   @IsEnum(UserStatus)
   @IsOptional()
   status?: UserStatus;
+
+  @ApiProperty({
+    example: 15,
+    description: 'VAT rate percentage (0–100)',
+    required: false,
+  })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  vatRate?: number;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Withholding tax rate percentage (0–100)',
+    required: false,
+  })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  withholdingRate?: number;
+
+  @ApiProperty({
+    example: 1,
+    description: 'Default rent due day of month (1–30)',
+    required: false,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  @IsOptional()
+  paymentCollectionDay?: number;
+
+  @ApiProperty({
+    example: 10,
+    description: 'Total number of parking lots in the building',
+    required: false,
+  })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  totalParkingLots?: number;
 }

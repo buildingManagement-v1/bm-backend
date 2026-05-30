@@ -31,6 +31,10 @@ export class BuildingsService {
         contactPhone: dto.contactPhone,
         logoUrl: dto.logoUrl,
         settings: dto.settings,
+        vatRate: dto.vatRate,
+        withholdingRate: dto.withholdingRate,
+        paymentCollectionDay: dto.paymentCollectionDay,
+        totalParkingLots: dto.totalParkingLots,
       },
     });
 
