@@ -10,7 +10,7 @@ import {
 export class LoginManagerDto {
   @ApiProperty({ example: 'manager@example.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'Password123!' })
   @IsString()

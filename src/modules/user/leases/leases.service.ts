@@ -32,20 +32,45 @@ export class LeasesService {
     userId: string,
     userRole: string,
   ) {
-    const tenant = await this.prisma.tenant.findFirst({
-      where: whereActive({ id: dto.tenantId, buildingId }),
-    });
+    const [tenant, unit, building] = await Promise.all([
+      this.prisma.tenant.findFirst({
+        where: whereActive({ id: dto.tenantId, buildingId }),
+      }),
+      this.prisma.unit.findFirst({
+        where: whereActive({ id: dto.unitId, buildingId }),
+      }),
+      this.prisma.building.findFirst({
+        where: { id: buildingId },
+        select: { paymentCollectionDay: true, totalParkingLots: true },
+      }),
+    ]);
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found in this building');
     }
 
-    const unit = await this.prisma.unit.findFirst({
-      where: whereActive({ id: dto.unitId, buildingId }),
-    });
-
     if (!unit) {
       throw new NotFoundException('Unit not found in this building');
+    }
+
+    const effectivePaymentDay = dto.useDefaultPaymentDay
+      ? (building?.paymentCollectionDay ?? null)
+      : (dto.paymentCollectionDay ?? null);
+
+    const totalLots = building?.totalParkingLots ?? 0;
+    if (totalLots > 0) {
+      const { _sum } = await this.prisma.lease.aggregate({
+        where: whereActive({ buildingId, status: 'active' as const }),
+        _sum: { carsAllowed: true },
+      });
+      const usedLots = Number(_sum.carsAllowed ?? 0);
+      const requested = dto.carsAllowed ?? 0;
+      if (usedLots + requested > totalLots) {
+        const remaining = Math.max(0, totalLots - usedLots);
+        throw new BadRequestException(
+          `Not enough parking slots available. ${remaining} remaining.`,
+        );
+      }
     }
 
     const overlapping = await this.prisma.lease.findFirst({
@@ -85,16 +110,19 @@ export class LeasesService {
           rentAmount: dto.rentAmount,
           securityDeposit: dto.securityDeposit ?? undefined,
           carsAllowed: dto.carsAllowed ?? 0,
+          useDefaultPaymentDay: dto.useDefaultPaymentDay,
+          paymentCollectionDay: effectivePaymentDay,
+          applyWithholding: dto.applyWithholding,
           status: dto.status || 'active',
           terms: dto.terms as Prisma.InputJsonValue,
         },
         include: leaseInclude,
       });
 
-      // Update unit to occupied
+      // Update unit to occupied and sync rent price with the lease
       await tx.unit.update({
         where: { id: dto.unitId },
-        data: { status: 'occupied' },
+        data: { status: 'occupied', rentPrice: dto.rentAmount },
       });
 
       // Activate tenant
@@ -196,6 +224,30 @@ export class LeasesService {
       throw new ConflictException('Cannot edit a terminated lease');
     }
 
+    if (dto.carsAllowed !== undefined) {
+      const building = await this.prisma.building.findFirst({
+        where: { id: buildingId },
+        select: { totalParkingLots: true },
+      });
+      const totalLots = building?.totalParkingLots ?? 0;
+      if (totalLots > 0) {
+        const { _sum } = await this.prisma.lease.aggregate({
+          where: {
+            ...whereActive({ buildingId, status: 'active' as const }),
+            id: { not: id },
+          },
+          _sum: { carsAllowed: true },
+        });
+        const usedLots = Number(_sum.carsAllowed ?? 0);
+        if (usedLots + dto.carsAllowed > totalLots) {
+          const remaining = Math.max(0, totalLots - usedLots);
+          throw new BadRequestException(
+            `Not enough parking slots available. ${remaining} remaining.`,
+          );
+        }
+      }
+    }
+
     const updated = await this.prisma.lease.update({
       where: { id },
       data: {
@@ -204,11 +256,21 @@ export class LeasesService {
         rentAmount: dto.rentAmount,
         securityDeposit: dto.securityDeposit,
         carsAllowed: dto.carsAllowed,
+        useDefaultPaymentDay: dto.useDefaultPaymentDay,
+        paymentCollectionDay: dto.paymentCollectionDay,
+        applyWithholding: dto.applyWithholding,
         status: dto.status,
         terms: dto.terms as Prisma.InputJsonValue,
       },
       include: leaseInclude,
     });
+
+    if (dto.rentAmount !== undefined) {
+      await this.prisma.unit.update({
+        where: { id: lease.unitId },
+        data: { rentPrice: dto.rentAmount },
+      });
+    }
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({

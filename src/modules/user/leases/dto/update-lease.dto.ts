@@ -1,5 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsNumber, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsInt,
+  Min,
+  Max,
+} from 'class-validator';
 import { LeaseStatus } from 'generated/prisma/enums';
 
 export class UpdateLeaseDto {
@@ -27,6 +36,23 @@ export class UpdateLeaseDto {
   @IsOptional()
   @IsNumber()
   carsAllowed?: number;
+
+  @ApiProperty({ example: true, required: false })
+  @IsOptional()
+  @IsBoolean()
+  useDefaultPaymentDay?: boolean;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  paymentCollectionDay?: number;
+
+  @ApiProperty({ example: false, required: false })
+  @IsOptional()
+  @IsBoolean()
+  applyWithholding?: boolean;
 
   @ApiProperty({
     enum: LeaseStatus,
