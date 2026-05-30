@@ -57,10 +57,23 @@ export class PaymentsService {
       throw new BadRequestException('Tenant has no active lease for this unit');
     }
 
-    const invoiceNumber = await this.generateInvoiceNumber(buildingId);
+    const [invoiceNumber, building] = await Promise.all([
+      this.generateInvoiceNumber(buildingId),
+      this.prisma.building.findUnique({
+        where: { id: buildingId },
+        select: {
+          name: true,
+          address: true,
+          city: true,
+          country: true,
+          vatRate: true,
+          withholdingRate: true,
+        },
+      }),
+    ]);
 
-    // For rent: always recompute amount from DB periods — ignore client-sent amount
-    let paymentAmount = dto.amount;
+    // For rent: recompute base amount from DB periods — ignore client-sent amount
+    let baseAmount = dto.amount;
     if (
       dto.type === 'rent' &&
       dto.monthsCovered &&
@@ -70,18 +83,61 @@ export class PaymentsService {
         where: { leaseId: activeLease.id, month: { in: dto.monthsCovered } },
         select: { rentAmount: true },
       });
-      paymentAmount = periods.reduce((sum, p) => sum + Number(p.rentAmount), 0);
+      baseAmount = periods.reduce((sum, p) => sum + Number(p.rentAmount), 0);
     }
 
-    if (paymentAmount <= 0) {
+    if (baseAmount <= 0) {
       throw new BadRequestException('Payment amount must be greater than 0');
     }
 
-    // Get building info for invoice
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
-      select: { name: true, address: true, city: true, country: true },
-    });
+    // Compute tax breakdown for rent
+    let vatAmount = 0;
+    let withholdingAmount = 0;
+    let paymentAmount = baseAmount;
+
+    if (dto.type === 'rent') {
+      const vatRate = Number(building?.vatRate ?? 0);
+      const withholdingRate = Number(building?.withholdingRate ?? 0);
+      vatAmount =
+        vatRate > 0 ? Math.round(baseAmount * (vatRate / 100) * 100) / 100 : 0;
+      withholdingAmount =
+        activeLease.applyWithholding && withholdingRate > 0
+          ? Math.round(
+              (baseAmount + vatAmount) * (withholdingRate / 100) * 100,
+            ) / 100
+          : 0;
+      paymentAmount =
+        Math.round((baseAmount + vatAmount - withholdingAmount) * 100) / 100;
+    }
+
+    // Build invoice line items
+    const invoiceItems: Array<{ description: string; amount: number }> =
+      dto.type === 'rent'
+        ? [
+            { description: 'Base Rent', amount: baseAmount },
+            ...(vatAmount > 0
+              ? [
+                  {
+                    description: `VAT (${Number(building?.vatRate ?? 0)}%)`,
+                    amount: vatAmount,
+                  },
+                ]
+              : []),
+            ...(withholdingAmount > 0
+              ? [
+                  {
+                    description: `Withholding (${Number(building?.withholdingRate ?? 0)}%)`,
+                    amount: -withholdingAmount,
+                  },
+                ]
+              : []),
+          ]
+        : [
+            {
+              description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment`,
+              amount: paymentAmount,
+            },
+          ];
 
     const payment = await this.prisma.$transaction(async (tx) => {
       const newPayment = await tx.payment.create({
@@ -90,6 +146,10 @@ export class PaymentsService {
           tenantId: dto.tenantId,
           unitId: activeLease.unitId,
           amount: paymentAmount,
+          baseAmount: dto.type === 'rent' ? baseAmount : undefined,
+          vatAmount: dto.type === 'rent' ? vatAmount : undefined,
+          withholdingAmount:
+            dto.type === 'rent' ? withholdingAmount : undefined,
           type: dto.type,
           status: 'completed',
           paymentDate: new Date(dto.paymentDate),
@@ -106,12 +166,7 @@ export class PaymentsService {
           amount: paymentAmount,
           dueDate: new Date(dto.paymentDate),
           status: 'paid',
-          items: [
-            {
-              description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment`,
-              amount: paymentAmount,
-            },
-          ] as Prisma.InputJsonValue,
+          items: invoiceItems as Prisma.InputJsonValue,
           notes: dto.notes,
         },
       });
@@ -173,6 +228,23 @@ export class PaymentsService {
       select: { unitNumber: true },
     });
 
+    const pdfItems =
+      dto.type === 'rent'
+        ? invoiceItems.map((item, i) =>
+            i === 0
+              ? {
+                  ...item,
+                  description: `${item.description} - Unit ${unit?.unitNumber || 'N/A'}`,
+                }
+              : item,
+          )
+        : [
+            {
+              description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${unit?.unitNumber || 'N/A'}`,
+              amount: paymentAmount,
+            },
+          ];
+
     const pdfDoc = this.pdfService.generatePaymentInvoice({
       invoiceNumber,
       date: payment!.paymentDate,
@@ -180,12 +252,7 @@ export class PaymentsService {
       buildingAddress,
       tenantName: payment!.tenant.name,
       tenantEmail: payment!.tenant.email,
-      items: [
-        {
-          description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${unit?.unitNumber || 'N/A'}`,
-          amount: paymentAmount,
-        },
-      ],
+      items: pdfItems,
       total: paymentAmount,
       status: 'paid',
     });
@@ -298,22 +365,31 @@ export class PaymentsService {
   }
 
   async getPaymentCalendar(buildingId: string, tenantId: string) {
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { id: tenantId, buildingId },
-      include: {
-        leases: {
-          where: { status: 'active' },
-          include: {
-            unit: { select: { id: true, unitNumber: true, floor: true } },
-            paymentPeriods: { orderBy: { month: 'asc' } },
+    const [tenant, building] = await Promise.all([
+      this.prisma.tenant.findFirst({
+        where: { id: tenantId, buildingId },
+        include: {
+          leases: {
+            where: { status: 'active' },
+            include: {
+              unit: { select: { id: true, unitNumber: true, floor: true } },
+              paymentPeriods: { orderBy: { month: 'asc' } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.building.findUnique({
+        where: { id: buildingId },
+        select: { vatRate: true, withholdingRate: true },
+      }),
+    ]);
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
+
+    const vatRate = Number(building?.vatRate ?? 0);
+    const withholdingRate = Number(building?.withholdingRate ?? 0);
 
     return tenant.leases.map((lease) => ({
       leaseId: lease.id,
@@ -323,6 +399,9 @@ export class PaymentsService {
       startDate: lease.startDate,
       endDate: lease.endDate,
       rentAmount: lease.rentAmount,
+      applyWithholding: lease.applyWithholding,
+      vatRate,
+      withholdingRate,
       periods: lease.paymentPeriods,
     }));
   }
