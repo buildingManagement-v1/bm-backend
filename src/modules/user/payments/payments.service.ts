@@ -59,6 +59,24 @@ export class PaymentsService {
 
     const invoiceNumber = await this.generateInvoiceNumber(buildingId);
 
+    // For rent: always recompute amount from DB periods — ignore client-sent amount
+    let paymentAmount = dto.amount;
+    if (
+      dto.type === 'rent' &&
+      dto.monthsCovered &&
+      dto.monthsCovered.length > 0
+    ) {
+      const periods = await this.prisma.paymentPeriod.findMany({
+        where: { leaseId: activeLease.id, month: { in: dto.monthsCovered } },
+        select: { rentAmount: true },
+      });
+      paymentAmount = periods.reduce((sum, p) => sum + Number(p.rentAmount), 0);
+    }
+
+    if (paymentAmount <= 0) {
+      throw new BadRequestException('Payment amount must be greater than 0');
+    }
+
     // Get building info for invoice
     const building = await this.prisma.building.findUnique({
       where: { id: buildingId },
@@ -71,7 +89,7 @@ export class PaymentsService {
           buildingId,
           tenantId: dto.tenantId,
           unitId: activeLease.unitId,
-          amount: dto.amount,
+          amount: paymentAmount,
           type: dto.type,
           status: 'completed',
           paymentDate: new Date(dto.paymentDate),
@@ -85,13 +103,13 @@ export class PaymentsService {
           tenantId: dto.tenantId,
           unitId: activeLease.unitId,
           invoiceNumber,
-          amount: dto.amount,
+          amount: paymentAmount,
           dueDate: new Date(dto.paymentDate),
           status: 'paid',
           items: [
             {
               description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment`,
-              amount: dto.amount,
+              amount: paymentAmount,
             },
           ] as Prisma.InputJsonValue,
           notes: dto.notes,
@@ -165,10 +183,10 @@ export class PaymentsService {
       items: [
         {
           description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${unit?.unitNumber || 'N/A'}`,
-          amount: Number(payment!.amount),
+          amount: paymentAmount,
         },
       ],
-      total: Number(payment!.amount),
+      total: paymentAmount,
       status: 'paid',
     });
 
