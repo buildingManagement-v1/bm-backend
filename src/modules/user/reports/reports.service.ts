@@ -18,6 +18,17 @@ export interface ReportSummary {
   highlights?: string[];
 }
 
+function taxAdjusted(
+  base: number,
+  vatRate: number,
+  withholdingRate: number,
+  applyWithholding: boolean,
+): number {
+  const vat = (base * vatRate) / 100;
+  const wh = applyWithholding ? ((base + vat) * withholdingRate) / 100 : 0;
+  return Math.round((base + vat - wh) * 100) / 100;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
@@ -26,7 +37,6 @@ export class ReportsService {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
-    const currentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
     const startOfMonth = new Date(currentYear, currentMonth - 1, 1);
     const endOfMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
@@ -34,9 +44,11 @@ export class ReportsService {
       totalUnits,
       occupiedUnits,
       vacantCount,
-      expectedRentThisMonth,
+      expectedPeriods,
       collectedThisMonth,
-      outstandingData,
+      outstandingPeriods,
+      building,
+      activeLeases,
       expiringIn30Days,
       openMaintenanceCount,
     ] = await Promise.all([
@@ -45,15 +57,14 @@ export class ReportsService {
       }),
       this.prisma.unit.count({ where: { buildingId, status: 'occupied' } }),
       this.prisma.unit.count({ where: { buildingId, status: 'vacant' } }),
-      this.prisma.paymentPeriod
-        .aggregate({
-          where: {
-            lease: { buildingId, status: 'active' },
-            month: currentMonthStr,
-          },
-          _sum: { rentAmount: true },
-        })
-        .then((r) => Number(r._sum.rentAmount ?? 0)),
+      this.prisma.paymentPeriod.findMany({
+        where: {
+          lease: { buildingId, status: 'active' },
+          periodStart: { lte: endOfMonth },
+          periodEnd: { gte: startOfMonth },
+        },
+        select: { leaseId: true, rentAmount: true },
+      }),
       this.prisma.payment
         .aggregate({
           where: {
@@ -64,19 +75,21 @@ export class ReportsService {
           _sum: { amount: true },
         })
         .then((r) => Number(r._sum.amount ?? 0)),
-      this.prisma.paymentPeriod
-        .aggregate({
-          where: {
-            lease: { buildingId, status: 'active' },
-            status: { in: ['unpaid', 'overdue'] },
-          },
-          _sum: { rentAmount: true },
-          _count: true,
-        })
-        .then((r) => ({
-          amount: Number(r._sum.rentAmount ?? 0),
-          count: r._count,
-        })),
+      this.prisma.paymentPeriod.findMany({
+        where: {
+          lease: { buildingId, status: 'active' },
+          status: { in: ['unpaid', 'overdue'] },
+        },
+        select: { leaseId: true, rentAmount: true },
+      }),
+      this.prisma.building.findUnique({
+        where: { id: buildingId },
+        select: { vatRate: true, withholdingRate: true },
+      }),
+      this.prisma.lease.findMany({
+        where: { buildingId, status: 'active' },
+        select: { id: true, applyWithholding: true },
+      }),
       this.prisma.lease.count({
         where: {
           buildingId,
@@ -94,6 +107,37 @@ export class ReportsService {
         },
       }),
     ]);
+
+    const vatRate = Number(building?.vatRate ?? 0);
+    const withholdingRate = Number(building?.withholdingRate ?? 0);
+    const withholdingByLease = new Map(
+      activeLeases.map((l) => [l.id, l.applyWithholding]),
+    );
+    const expectedRentThisMonth = expectedPeriods.reduce(
+      (sum, p) =>
+        sum +
+        taxAdjusted(
+          Number(p.rentAmount),
+          vatRate,
+          withholdingRate,
+          withholdingByLease.get(p.leaseId) ?? false,
+        ),
+      0,
+    );
+    const outstandingData = {
+      amount: outstandingPeriods.reduce(
+        (sum, p) =>
+          sum +
+          taxAdjusted(
+            Number(p.rentAmount),
+            vatRate,
+            withholdingRate,
+            withholdingByLease.get(p.leaseId) ?? false,
+          ),
+        0,
+      ),
+      count: outstandingPeriods.length,
+    };
 
     const occupancyRate =
       totalUnits > 0
@@ -305,41 +349,70 @@ export class ReportsService {
       cursor.setMonth(cursor.getMonth() + 1);
     }
 
-    const [periodsInRange, paymentsInRange, outstandingPaymentsData] =
-      await Promise.all([
-        this.prisma.paymentPeriod.findMany({
-          where: {
-            lease: { buildingId, status: 'active' },
-            month: { in: monthsInRange },
-          },
-          select: { month: true, rentAmount: true },
-        }),
-        this.prisma.payment.findMany({
-          where: {
-            buildingId,
-            status: 'completed',
-            paymentDate: { gte: start, lte: end },
-          },
-          select: { amount: true, paymentDate: true },
-        }),
-        this.prisma.paymentPeriod.findMany({
-          where: {
-            lease: { buildingId, status: 'active' },
-            status: { in: ['unpaid', 'overdue'] },
-          },
-          include: {
-            lease: {
-              select: {
-                tenant: { select: { id: true, name: true } },
-                unit: { select: { id: true, unitNumber: true } },
-              },
-            },
-          },
-        }),
-      ]);
+    const [
+      periodsInRange,
+      paymentsInRange,
+      outstandingPaymentsData,
+      building,
+      leaseDetails,
+    ] = await Promise.all([
+      this.prisma.paymentPeriod.findMany({
+        where: {
+          lease: { buildingId, status: 'active' },
+          periodStart: { lte: end },
+          periodEnd: { gte: start },
+        },
+        select: { leaseId: true, month: true, rentAmount: true },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          buildingId,
+          status: 'completed',
+          paymentDate: { gte: start, lte: end },
+        },
+        select: { amount: true, paymentDate: true },
+      }),
+      this.prisma.paymentPeriod.findMany({
+        where: {
+          lease: { buildingId, status: 'active' },
+          status: { in: ['unpaid', 'overdue'] },
+        },
+        select: {
+          leaseId: true,
+          month: true,
+          rentAmount: true,
+          status: true,
+          periodEnd: true,
+        },
+      }),
+      this.prisma.building.findUnique({
+        where: { id: buildingId },
+        select: { vatRate: true, withholdingRate: true },
+      }),
+      this.prisma.lease.findMany({
+        where: { buildingId, status: 'active' },
+        select: {
+          id: true,
+          applyWithholding: true,
+          tenant: { select: { id: true, name: true } },
+          unit: { select: { id: true, unitNumber: true } },
+        },
+      }),
+    ]);
+
+    const vatRate = Number(building?.vatRate ?? 0);
+    const withholdingRate = Number(building?.withholdingRate ?? 0);
+    const leaseById = new Map(leaseDetails.map((l) => [l.id, l]));
 
     const expectedRent = periodsInRange.reduce(
-      (sum, p) => sum + Number(p.rentAmount),
+      (sum, p) =>
+        sum +
+        taxAdjusted(
+          Number(p.rentAmount),
+          vatRate,
+          withholdingRate,
+          leaseById.get(p.leaseId)?.applyWithholding ?? false,
+        ),
       0,
     );
     const collectedRent = paymentsInRange.reduce(
@@ -356,7 +429,13 @@ export class ReportsService {
     for (const p of periodsInRange) {
       expectedByMonth.set(
         p.month,
-        (expectedByMonth.get(p.month) ?? 0) + Number(p.rentAmount),
+        (expectedByMonth.get(p.month) ?? 0) +
+          taxAdjusted(
+            Number(p.rentAmount),
+            vatRate,
+            withholdingRate,
+            leaseById.get(p.leaseId)?.applyWithholding ?? false,
+          ),
       );
     }
     const collectedByMonth = new Map<string, number>();
@@ -378,10 +457,6 @@ export class ReportsService {
     }));
 
     const now = new Date();
-    const outstandingAmount = outstandingPaymentsData.reduce(
-      (sum, p) => sum + Number(p.rentAmount),
-      0,
-    );
     const aging = { days0_30: 0, days31_60: 0, days61Plus: 0 };
     const periodsWithOverdue: Array<{
       month: string;
@@ -392,7 +467,6 @@ export class ReportsService {
       unit: { id: string; unitNumber: string };
     }> = [];
 
-    const leaseKey = (p: (typeof outstandingPaymentsData)[0]) => p.leaseId;
     const groupedByLease = new Map<
       string,
       {
@@ -405,16 +479,29 @@ export class ReportsService {
       }
     >();
 
+    const unknownTenant = { id: '', name: 'Unknown' };
+    const unknownUnit = { id: '', unitNumber: 'Unknown' };
+
     for (const p of outstandingPaymentsData) {
-      const [y, m] = p.month.split('-').map(Number);
-      const periodEnd = new Date(y, m, 0, 23, 59, 59, 999);
+      const lease = leaseById.get(p.leaseId);
+      const tenant = lease?.tenant ?? unknownTenant;
+      const unit = lease?.unit ?? unknownUnit;
+      const cycleEnd = p.periodEnd
+        ? new Date(p.periodEnd)
+        : (() => {
+            const [y, mo] = p.month.split('-').map(Number);
+            return new Date(y, mo, 0, 23, 59, 59, 999);
+          })();
       const daysOverdue = Math.max(
         0,
-        Math.ceil(
-          (now.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24),
-        ),
+        Math.ceil((now.getTime() - cycleEnd.getTime()) / (1000 * 60 * 60 * 24)),
       );
-      const amount = Number(p.rentAmount);
+      const amount = taxAdjusted(
+        Number(p.rentAmount),
+        vatRate,
+        withholdingRate,
+        lease?.applyWithholding ?? false,
+      );
       if (daysOverdue <= 30) aging.days0_30 += amount;
       else if (daysOverdue <= 60) aging.days31_60 += amount;
       else aging.days61Plus += amount;
@@ -423,16 +510,15 @@ export class ReportsService {
         amount,
         status: p.status,
         daysOverdue,
-        tenant: p.lease.tenant,
-        unit: p.lease.unit,
+        tenant,
+        unit,
       });
 
-      const key = leaseKey(p);
-      const existing = groupedByLease.get(key);
+      const existing = groupedByLease.get(p.leaseId);
       if (!existing) {
-        groupedByLease.set(key, {
-          tenant: p.lease.tenant,
-          unit: p.lease.unit,
+        groupedByLease.set(p.leaseId, {
+          tenant,
+          unit,
           totalAmount: amount,
           periodCount: 1,
           months: [p.month],
@@ -448,6 +534,18 @@ export class ReportsService {
         );
       }
     }
+
+    const outstandingAmount = outstandingPaymentsData.reduce(
+      (sum, p) =>
+        sum +
+        taxAdjusted(
+          Number(p.rentAmount),
+          vatRate,
+          withholdingRate,
+          leaseById.get(p.leaseId)?.applyWithholding ?? false,
+        ),
+      0,
+    );
 
     const groupedList = Array.from(groupedByLease.values()).sort(
       (a, b) => b.maxDaysOverdue - a.maxDaysOverdue,
