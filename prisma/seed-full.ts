@@ -301,7 +301,11 @@ async function main() {
 
   for (const ra of roleAssignments) {
     const existing = await prisma.managerBuildingRole.findFirst({
-      where: { managerId: ra.managerId, buildingId: ra.buildingId, deletedAt: null },
+      where: {
+        managerId: ra.managerId,
+        buildingId: ra.buildingId,
+        deletedAt: null,
+      },
     });
     if (existing) {
       await prisma.managerBuildingRole.update({
