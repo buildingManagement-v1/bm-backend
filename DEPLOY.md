@@ -119,10 +119,10 @@ docker compose run --rm -e RUN_MIGRATIONS=true app true
   `bm_uploads` Docker volume. That survives redeploys on this node, but not a
   server move and not multiple nodes. Proper fix is object storage (S3/GCS) —
   an app-code change.
-- **CORS ⚠️** — currently hardcoded to `localhost:3000/3001` in
-  [`src/main.ts`](src/main.ts). The Vercel frontend will be **blocked** until
-  this reads the allowed origin from `FRONTEND_URL`. One-line fix, but required
-  before the frontend works against prod.
+- **CORS** — now reads the allowlist from `CORS_ORIGINS` (comma-separated) or
+  `FRONTEND_URL` in [`src/main.ts`](src/main.ts). Set `CORS_ORIGINS` in the VPS
+  `.env` to your Vercel frontend origin once it's deployed, then
+  `docker compose up -d` to reload.
 - **Health check** — no dedicated endpoint; `GET /api` (Swagger) returns 200 and
   works as a probe for now.
 
