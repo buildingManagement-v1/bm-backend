@@ -1,0 +1,46 @@
+# Production stack for the VPS.
+#
+# On the server this lives at /opt/bm-backend/docker-compose.yml, next to a
+# .env file holding the real secrets (see .env.production.example + DEPLOY.md).
+# The GitHub Actions deploy job runs `docker compose pull && up -d` here.
+#
+# Postgres is self-hosted in this stack for a single-node VPS. To use a managed
+# database instead, delete the `postgres` service + its volume and point
+# DATABASE_URL at the external host.
+
+services:
+  app:
+    image: ghcr.io/zacknew/bm-backend:latest
+    container_name: bm-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Single node: apply pending migrations on boot, then start the server.
+      RUN_MIGRATIONS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - bm_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: bm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bms_db
+      POSTGRES_USER: bms_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bms_user -d bms_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  bm_uploads:
+  postgres_data:
