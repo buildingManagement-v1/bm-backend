@@ -7,8 +7,9 @@ on:
   workflow_dispatch: {}
 
 env:
-  # GHCR requires a lowercase path. Owner is "ZackNew" -> "zacknew".
-  IMAGE: ghcr.io/zacknew/bm-backend
+  # GHCR requires a lowercase path. Owner "buildingManagement-v1" -> lowercase.
+  # If the repo ever moves owners again, update this and docker-compose.prod.yml.
+  IMAGE: ghcr.io/buildingmanagement-v1/bm-backend
 
 jobs:
   build-and-push:

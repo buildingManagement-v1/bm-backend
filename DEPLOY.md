@@ -1,7 +1,7 @@
 # Deployment Guide — `bm-backend`
 
 > Audience: DevOps. How the backend is built, shipped, and deployed.
-> Repo: `github.com/ZackNew/bm-backend` (standalone — this repo *is* the backend).
+> Repo: `github.com/buildingManagement-v1/bm-backend` (standalone — this repo *is* the backend).
 > Target: a single **VPS** running Docker, image hosted on **GHCR**, deployed by
 > **GitHub Actions** on every push to `main`.
 
@@ -10,7 +10,7 @@ Pipeline at a glance:
 ```
 push to main ──► GitHub Actions
                    ├─ build Docker image  (Dockerfile)
-                   ├─ push to ghcr.io/zacknew/bm-backend:latest + :<sha>
+                   ├─ push to ghcr.io/buildingmanagement-v1/bm-backend:latest + :<sha>
                    └─ ssh VPS ──► docker compose pull && up -d
                                     └─ app migrates on boot, then serves :8000
 ```
@@ -28,7 +28,7 @@ A single Docker image built from [`Dockerfile`](Dockerfile).
 | Listens on | `8000` (override with `PORT`) |
 | Image size | ~697 MB |
 | Entry | `node dist/src/main` (handled by the image) |
-| Registry | `ghcr.io/zacknew/bm-backend` |
+| Registry | `ghcr.io/buildingmanagement-v1/bm-backend` |
 
 Build, migrations, and boot were verified locally against a throwaway Postgres
 (see §7 for the commands).

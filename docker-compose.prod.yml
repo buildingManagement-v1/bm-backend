@@ -10,7 +10,7 @@
 
 services:
   app:
-    image: ghcr.io/zacknew/bm-backend:latest
+    image: ghcr.io/buildingmanagement-v1/bm-backend:latest
     container_name: bm-backend
     restart: unless-stopped
     env_file: .env
