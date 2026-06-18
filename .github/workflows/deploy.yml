@@ -4,6 +4,8 @@ name: Deploy backend
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'        # docs-only changes don't need a rebuild/redeploy
   workflow_dispatch: {}
 
 env:

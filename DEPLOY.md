@@ -1,159 +1,106 @@
-# Deployment Guide — `bm-backend`
+# Deployment — `bm-backend`
 
-> Audience: DevOps. How the backend is built, shipped, and deployed.
-> Repo: `github.com/buildingManagement-v1/bm-backend` (standalone — this repo *is* the backend).
-> Target: a single **VPS** running Docker, image hosted on **GHCR**, deployed by
-> **GitHub Actions** on every push to `main`.
-
-Pipeline at a glance:
-
-```
-push to main ──► GitHub Actions
-                   ├─ build Docker image  (Dockerfile)
-                   ├─ push to ghcr.io/buildingmanagement-v1/bm-backend:latest + :<sha>
-                   └─ ssh VPS ──► docker compose pull && up -d
-                                    └─ app migrates on boot, then serves :8000
-```
+**Live:** https://bm-api.duckdns.org  ·  Swagger: `/api`  ·  API routes under `/v1`
+**Repo:** `github.com/buildingManagement-v1/bm-backend` (this repo *is* the backend)
+**Deploys:** automatically on every push to `main`.
 
 ---
 
-## 1. What gets deployed
+## How a request flows
 
-A single Docker image built from [`Dockerfile`](Dockerfile).
+```
+Browser / Vercel frontend
+      │  HTTPS
+      ▼
+https://bm-api.duckdns.org          DuckDNS → 49.12.109.7
+      │
+  host nginx  (TLS cert via certbot, auto-renew)
+      │  proxy_pass → 127.0.0.1:8000
+      ▼
+  bm-backend container ──► bm-postgres container     (docker compose, /opt/bm-backend)
+      │
+  uploads → bm_uploads docker volume
+```
 
-| Property | Value |
-|---|---|
-| Base | `node:24-alpine` |
-| Runs as | non-root user `node` (uid 1000) |
-| Listens on | `8000` (override with `PORT`) |
-| Image size | ~697 MB |
-| Entry | `node dist/src/main` (handled by the image) |
-| Registry | `ghcr.io/buildingmanagement-v1/bm-backend` |
+## How a deploy flows
 
-Build, migrations, and boot were verified locally against a throwaway Postgres
-(see §7 for the commands).
+```
+git push main ─► GitHub Actions (.github/workflows/deploy.yml)
+   1. build image from Dockerfile
+   2. push ghcr.io/buildingmanagement-v1/bm-backend  (tags: latest + <git-sha>)
+   3. ssh into VPS → docker compose pull && up -d
+        └─ entrypoint runs `prisma migrate deploy`, then starts the server
+```
+
+No manual steps. Merge to `main` = deployed.
 
 ---
 
-## 2. Files in this repo
+## Where everything lives
 
+**In this repo**
 | File | Purpose |
 |---|---|
-| [`Dockerfile`](Dockerfile) | Multi-stage production image |
-| [`docker-entrypoint.sh`](docker-entrypoint.sh) | Runs `migrate deploy` when `RUN_MIGRATIONS=true`, then starts the app |
-| [`.dockerignore`](.dockerignore) | Keeps `node_modules`, secrets, `uploads` out of the build |
-| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | CI/CD: build → push → deploy |
-| [`docker-compose.prod.yml`](docker-compose.prod.yml) | The stack that runs **on the VPS** (app + Postgres) |
-| [`.env.production.example`](.env.production.example) | Template for the VPS `.env` (real secrets) |
+| `Dockerfile` | Multi-stage prod image (node:24-alpine, non-root, ~697 MB) |
+| `docker-entrypoint.sh` | Runs migrations when `RUN_MIGRATIONS=true`, then starts app |
+| `.github/workflows/deploy.yml` | The CI/CD pipeline above |
+| `docker-compose.prod.yml` | Reference copy of the VPS stack |
+| `.env.production.example` | Template for the VPS secrets file |
 
----
-
-## 3. GitHub configuration (you have admin)
-
-**Settings → Secrets and variables → Actions → Secrets.** Only the SSH access
-to the VPS is needed — the app's runtime secrets live in the VPS `.env`, not here.
-
-| Secret | What it is |
+**On the VPS** (`49.12.109.7`, SSH user `zat`, key-based) under `/opt/bm-backend/`
+| Item | Purpose |
 |---|---|
-| `VPS_HOST` | VPS IP or hostname |
-| `VPS_USER` | SSH user the deploy connects as (e.g. `deploy`) |
-| `VPS_SSH_KEY` | **Private** key whose public half is in the VPS user's `~/.ssh/authorized_keys` |
-| `VPS_PORT` | *(optional)* SSH port if not 22 |
+| `docker-compose.yml` | The running stack (app + Postgres). **Managed by hand**, not by CI. |
+| `.env` | Real secrets (DB, JWT, Resend, Firebase, CORS). **Never committed.** |
+| `bm_uploads` volume | Uploaded receipts |
+| `postgres_data` volume | Database data |
 
-GHCR push/pull uses the workflow's built-in `GITHUB_TOKEN` — no extra secret.
-(The deploy job logs the VPS in to GHCR with that short-lived token each run.)
+**GitHub** → Settings → Secrets → Actions: `VPS_HOST`, `VPS_USER`, `VPS_PORT`, `VPS_SSH_KEY` (deploy key). Image push/pull uses the built-in `GITHUB_TOKEN`.
 
-> If GHCR pull from the VPS ever fails on auth, the fallback is a read-only PAT
-> (`read:packages`) stored once on the VPS via `docker login ghcr.io`.
+**nginx** → `/etc/nginx/sites-available/bm-api.duckdns.org` (cert managed by certbot).
 
 ---
 
-## 4. VPS setup (one time)
-
-On the server, as a sudo-capable user:
+## Operating it
 
 ```bash
-# 1. Install Docker Engine + compose plugin (skip if already present)
-curl -fsSL https://get.docker.com | sh
+# Deploy            → just push/merge to main.
 
-# 2. Create the deploy directory
-sudo mkdir -p /opt/bm-backend && sudo chown "$USER" /opt/bm-backend
+# Watch a deploy    → GitHub → Actions tab ("Deploy backend").
+
+# Logs
+ssh zat@49.12.109.7 -p 1447
+docker logs -f bm-backend
+
+# Change a secret / env value
+cd /opt/bm-backend && nano .env
+docker compose up -d --force-recreate --no-deps app   # ~10s blip while it reboots
+
+# Roll back to a previous version
 cd /opt/bm-backend
-
-# 3. Put the compose file here (copy docker-compose.prod.yml from the repo,
-#    renamed to docker-compose.yml) and the secrets file:
-#    - /opt/bm-backend/docker-compose.yml   (from docker-compose.prod.yml)
-#    - /opt/bm-backend/.env                 (from .env.production.example, filled in)
-
-# 4. First image pull needs GHCR auth (one-time login, or rely on the Action):
-#    echo <GHCR_PAT_or_token> | docker login ghcr.io -u <github-user> --password-stdin
-
-# 5. Bring it up
+#   set image: ghcr.io/buildingmanagement-v1/bm-backend:<old-git-sha> in docker-compose.yml
 docker compose up -d
-```
 
-The deploy user must be in the `docker` group (`sudo usermod -aG docker $USER`)
-so the GitHub Action can run `docker` without sudo.
-
----
-
-## 5. Database migrations
-
-Prisma migrations live in `prisma/migrations`. On this single-node VPS the app
-applies them **on boot** — the compose file sets `RUN_MIGRATIONS=true`, and the
-entrypoint runs `prisma migrate deploy` before starting the server.
-
-`migrate deploy` only applies already-committed migrations; it never resets.
-If you later scale to multiple replicas, drop `RUN_MIGRATIONS` from the app
-service and run migrations as a separate one-off step instead (to avoid races):
-
-```bash
+# Run migrations manually (normally automatic on boot)
 docker compose run --rm -e RUN_MIGRATIONS=true app true
 ```
 
 ---
 
-## 6. Things to address (not blockers for first deploy)
+## Must-know notes
 
-- **Uploads ⚠️** — payment receipts write to `/app/uploads`, persisted via the
-  `bm_uploads` Docker volume. That survives redeploys on this node, but not a
-  server move and not multiple nodes. Proper fix is object storage (S3/GCS) —
-  an app-code change.
-- **CORS** — now reads the allowlist from `CORS_ORIGINS` (comma-separated) or
-  `FRONTEND_URL` in [`src/main.ts`](src/main.ts). Set `CORS_ORIGINS` in the VPS
-  `.env` to your Vercel frontend origin once it's deployed, then
-  `docker compose up -d` to reload.
-- **Health check** — no dedicated endpoint; `GET /api` (Swagger) returns 200 and
-  works as a probe for now.
-
----
-
-## 7. Local verification (what was tested)
-
-```bash
-docker build -t bm-backend:local .
-
-docker run --rm -e DATABASE_URL="postgres://user:pass@host:5432/db" \
-  -e RUN_MIGRATIONS=true bm-backend:local true        # migrations apply
-
-docker run -d --name bm-api -p 8000:8000 \
-  -e DATABASE_URL="postgres://user:pass@host:5432/db" \
-  -e JWT_SECRET=... -e JWT_REFRESH_SECRET=... \
-  -e RESEND_API_KEY=... -e FRONTEND_URL=https://your-frontend \
-  -v bm_uploads:/app/uploads bm-backend:local
-
-curl -o /dev/null -w '%{http_code}\n' localhost:8000/api               # 200
-curl -o /dev/null -w '%{http_code}\n' localhost:8000/v1/app/buildings  # 401
-```
-
----
-
-## 8. Rollback
-
-Images are tagged with the git SHA. To roll back, on the VPS:
-
-```bash
-cd /opt/bm-backend
-# pin the previous good SHA in docker-compose.yml (image: ...:<sha>) then:
-docker compose up -d
-```
+- **⚠️ Shared server.** This VPS also runs unrelated projects (`arifget`, `eventality`)
+  behind the **same** host nginx. Touch **only** `bm-api.duckdns.org` configs/certs —
+  never their server blocks. nginx backups live at `/root/nginx-backup-*`. Always
+  `sudo nginx -t` before any reload.
+- **Migrations run on boot** (`RUN_MIGRATIONS=true`). Fine for one node. If you ever run
+  multiple app replicas, drop that flag and run migrations as a separate one-off step.
+- **CORS** is read from `CORS_ORIGINS` (comma-separated) in `.env`. Set it to the frontend
+  origin(s); reload to apply. (Currently allows `localhost` for dev testing.)
+- **Uploads** are on a local docker volume — survive redeploys, but not a server move or a
+  second node. Move to object storage (S3/GCS) before scaling. App-code change.
+- **Port 8000** is also directly reachable (`http://49.12.109.7:8000`) because Docker
+  publishes it past ufw. Optional hardening: bind it to `127.0.0.1` so HTTPS is the only
+  public entrypoint.
+- **No dedicated health endpoint** yet; `GET /api` (200) works as a probe.
+- **TLS** auto-renews via certbot's scheduled task; cert is per-domain (separate from arifget).
