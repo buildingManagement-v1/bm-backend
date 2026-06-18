@@ -14,8 +14,27 @@ async function bootstrap() {
     }),
   );
 
+  // Allowed origins come from CORS_ORIGINS (comma-separated) or FRONTEND_URL,
+  // falling back to local dev hosts. Each value is normalized to its origin
+  // (scheme + host + port) so a URL with a path still works.
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ??
+    process.env.FRONTEND_URL ??
+    'http://localhost:3000,http://localhost:3001'
+  )
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      try {
+        return new URL(value).origin;
+      } catch {
+        return value.replace(/\/+$/, '');
+      }
+    });
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: allowedOrigins,
     credentials: true,
   });
 
