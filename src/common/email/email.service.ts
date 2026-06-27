@@ -5,16 +5,22 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class EmailService {
   private resend: Resend;
+  private readonly fromAddress: string;
 
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
     this.resend = new Resend(apiKey);
+    // Must be an address on a domain verified in Resend, otherwise Resend
+    // only delivers to the account owner's own email. Configured via EMAIL_FROM.
+    this.fromAddress =
+      this.configService.get<string>('EMAIL_FROM') ??
+      'BMS <onboarding@resend.dev>';
   }
 
   // User/Owner Auth
   async sendUserRegistrationEmail(email: string, name: string) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Welcome to Building Management System',
       html: `
@@ -27,7 +33,7 @@ export class EmailService {
 
   async sendUserPasswordResetEmail(email: string, resetToken: string) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Password Reset Request',
       html: `
@@ -47,7 +53,7 @@ export class EmailService {
   ) {
     console.log('Temporary password', temporaryPassword);
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'You have Been Invited as a Building Manager',
       html: `
@@ -114,7 +120,7 @@ export class EmailService {
 
   async sendManagerPasswordResetEmail(email: string, resetToken: string) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Manager Password Reset',
       html: `
@@ -136,7 +142,7 @@ export class EmailService {
 
     const loginUrl = `${this.configService.get('FRONTEND_URL')}/login?type=tenant`;
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Welcome to Your Tenant Portal',
       html: `
@@ -177,7 +183,7 @@ export class EmailService {
 
   async sendTenantPasswordResetEmail(email: string, otp: string) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Tenant Password Reset',
       html: `
@@ -197,7 +203,7 @@ export class EmailService {
     invoiceLink?: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Subscription Activated',
       html: `
@@ -219,7 +225,7 @@ export class EmailService {
     invoiceLink?: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Subscription Updated',
       html: `
@@ -239,7 +245,7 @@ export class EmailService {
     expiryDate: Date,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Subscription Expiring Soon',
       html: `
@@ -257,7 +263,7 @@ export class EmailService {
     planName: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Subscription Expired',
       html: `
@@ -279,7 +285,7 @@ export class EmailService {
     rentAmount: number,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'New Lease Agreement',
       html: `
@@ -300,7 +306,7 @@ export class EmailService {
     expiryDate: Date,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Lease Expiring Soon',
       html: `
@@ -318,7 +324,7 @@ export class EmailService {
     unitNumber: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Lease Expired',
       html: `
@@ -338,7 +344,7 @@ export class EmailService {
     invoiceNumber: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Payment Receipt',
       html: `
@@ -360,7 +366,7 @@ export class EmailService {
     dueDate: Date,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'New Invoice',
       html: `
@@ -382,7 +388,7 @@ export class EmailService {
     dueDate: Date,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Payment Overdue',
       html: `
@@ -405,7 +411,7 @@ export class EmailService {
     dueDate: Date,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Payment Reminder',
       html: `
@@ -429,7 +435,7 @@ export class EmailService {
     priority: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: ownerEmail,
       subject: 'New Maintenance Request',
       html: `
@@ -451,7 +457,7 @@ export class EmailService {
     status: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: tenantEmail,
       subject: 'Maintenance Request Update',
       html: `
@@ -471,7 +477,7 @@ export class EmailService {
     temporaryPassword: string,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Platform Admin Account Created',
       html: `
@@ -485,7 +491,7 @@ export class EmailService {
 
   async sendPlatformAdminPasswordResetEmail(email: string, otp: string) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: 'Platform Admin Password Reset',
       html: `
@@ -505,7 +511,7 @@ export class EmailService {
     pdfBuffer: Buffer,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: `Subscription Invoice - ${invoiceNumber}`,
       html: `
@@ -540,7 +546,7 @@ export class EmailService {
     pdfBuffer: Buffer,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: `Payment Receipt - ${invoiceNumber}`,
       html: `
@@ -580,7 +586,7 @@ export class EmailService {
     pdfBuffer: Buffer,
   ) {
     await this.resend.emails.send({
-      from: 'BMS <onboarding@resend.dev>',
+      from: this.fromAddress,
       to: email,
       subject: `Subscription Upgrade Invoice - ${invoiceNumber}`,
       html: `
