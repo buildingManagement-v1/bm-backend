@@ -3,11 +3,14 @@ import {
   Get,
   Post,
   Body,
+  Query,
   Patch,
   Param,
   UseGuards,
   Res,
 } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { ExtendSubscriptionDto } from './dto/extend-subscription.dto';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -29,7 +32,10 @@ import type { Response } from 'express';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('super_admin', 'billing_manager')
 export class SubscriptionsController {
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a subscription' })
@@ -44,15 +50,25 @@ export class SubscriptionsController {
     return await this.subscriptionsService.create(
       createSubscriptionDto,
       admin.id,
-      admin.email,
+      await this.adminName(admin.id),
     );
   }
 
   @Get('all')
   @ApiOperation({ summary: 'Get all subscriptions' })
   @ApiResponse({ status: 200, description: 'Return all subscriptions' })
-  async findAll() {
-    return await this.subscriptionsService.findAllSubscriptions();
+  async findAll(
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return await this.subscriptionsService.findAllSubscriptions({
+      status,
+      q,
+      limit: Math.min(100, Math.max(1, Number(limit) || 20)),
+      offset: Math.max(0, Number(offset) || 0),
+    });
   }
 
   @Get('user/:userId')
@@ -84,7 +100,7 @@ export class SubscriptionsController {
       id,
       updateSubscriptionDto,
       admin.id,
-      admin.email,
+      await this.adminName(admin.id),
     );
   }
 
@@ -103,7 +119,7 @@ export class SubscriptionsController {
       id,
       upgradeDto.newPlanId,
       admin.id,
-      admin.email,
+      await this.adminName(admin.id),
     );
   }
 
@@ -118,6 +134,30 @@ export class SubscriptionsController {
       id,
       dto.newPlanId,
     );
+  }
+
+  @Post(':id/extend')
+  @ApiOperation({ summary: 'Extend the cycle (offline renewal or credit)' })
+  async extend(
+    @Param('id') id: string,
+    @Body() dto: ExtendSubscriptionDto,
+    @User() admin: { id: string },
+  ) {
+    return await this.subscriptionsService.extend(
+      id,
+      dto.months,
+      dto.reason,
+      admin.id,
+      await this.adminName(admin.id),
+    );
+  }
+
+  private async adminName(id: string): Promise<string> {
+    const admin = await this.prisma.platformAdmin.findUnique({
+      where: { id },
+      select: { name: true },
+    });
+    return admin?.name ?? 'Unknown admin';
   }
 
   @Get(':id/download')

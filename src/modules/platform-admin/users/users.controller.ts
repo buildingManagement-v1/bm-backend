@@ -8,6 +8,7 @@ import {
   Query,
   Body,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -16,6 +17,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { CreateOwnerDto, UpdateAccountStatusDto } from './dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -26,9 +29,56 @@ import { User } from '../../../common/decorators/user.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async adminOf(id: string) {
+    const admin = await this.prisma.platformAdmin.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+    return admin ?? { id, name: 'Unknown admin' };
+  }
 
   // ── Owners ──────────────────────────────────────────────────────────────
+
+  @Post('users')
+  @Roles('super_admin', 'user_manager')
+  async createOwner(
+    @Body() dto: CreateOwnerDto,
+    @User() admin: { id: string },
+  ) {
+    const data = await this.usersService.createOwner(
+      dto,
+      await this.adminOf(admin.id),
+    );
+    return {
+      success: true,
+      data,
+      message: 'Owner created. Login details were emailed to them.',
+    };
+  }
+
+  @Post('users/:id/send-password-reset')
+  @Roles('super_admin', 'user_manager')
+  async sendPasswordReset(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @User() admin: { id: string },
+  ) {
+    const data = await this.usersService.sendOwnerPasswordReset(
+      id,
+      await this.adminOf(admin.id),
+    );
+    return { success: true, data, message: data.message };
+  }
+
+  @Get('users/:id')
+  @Roles('super_admin', 'user_manager', 'billing_manager')
+  async getOwner(@Param('id', new ParseUUIDPipe()) id: string) {
+    return { success: true, data: await this.usersService.getOwnerDetail(id) };
+  }
 
   @Get('users')
   @Roles('super_admin', 'user_manager', 'billing_manager')
@@ -86,9 +136,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Activate or deactivate an owner' })
   async updateOwnerStatus(
     @Param('id') id: string,
-    @Body() body: { status: 'active' | 'inactive' },
+    @Body() body: UpdateAccountStatusDto,
+    @User() admin: { id: string },
   ) {
-    const result = await this.usersService.updateOwnerStatus(id, body.status);
+    const result = await this.usersService.updateOwnerStatus(
+      id,
+      body.status,
+      await this.adminOf(admin.id),
+    );
     return { success: true, data: result, message: 'Status updated' };
   }
 
@@ -121,9 +176,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Activate or deactivate a manager' })
   async updateManagerStatus(
     @Param('id') id: string,
-    @Body() body: { status: 'active' | 'inactive' },
+    @Body() body: UpdateAccountStatusDto,
+    @User() admin: { id: string },
   ) {
-    const result = await this.usersService.updateManagerStatus(id, body.status);
+    const result = await this.usersService.updateManagerStatus(
+      id,
+      body.status,
+      await this.adminOf(admin.id),
+    );
     return { success: true, data: result, message: 'Status updated' };
   }
 
@@ -156,9 +216,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Activate or deactivate a tenant' })
   async updateTenantStatus(
     @Param('id') id: string,
-    @Body() body: { status: 'active' | 'inactive' },
+    @Body() body: UpdateAccountStatusDto,
+    @User() admin: { id: string },
   ) {
-    const result = await this.usersService.updateTenantStatus(id, body.status);
+    const result = await this.usersService.updateTenantStatus(
+      id,
+      body.status,
+      await this.adminOf(admin.id),
+    );
     return { success: true, data: result, message: 'Status updated' };
   }
 }

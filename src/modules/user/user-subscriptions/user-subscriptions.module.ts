@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { UserSubscriptionsController } from './user-subscriptions.controller';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
-import { PlansModule } from 'src/modules/platform-admin/plans/plans.module';
+import { BillingModule } from 'src/modules/billing/billing.module';
 
 @Module({
-  imports: [SubscriptionsModule, PlansModule],
+  imports: [SubscriptionsModule, BillingModule],
   controllers: [UserSubscriptionsController],
 })
 export class UserSubscriptionsModule {}

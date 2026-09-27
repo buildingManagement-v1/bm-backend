@@ -262,7 +262,6 @@ export class ManagersService {
     const updateData: {
       name?: string;
       email?: string;
-      passwordHash?: string;
       phone?: string;
       status?: UserStatus;
     } = {};
@@ -272,36 +271,39 @@ export class ManagersService {
     if (dto.phone) updateData.phone = dto.phone;
     if (dto.status) updateData.status = dto.status;
 
-    if (dto.password) {
-      updateData.passwordHash = await bcrypt.hash(dto.password, 10);
-    }
+    // A password set by the owner revokes existing sessions and must be
+    // replaced by the manager at next login
+    const passwordData = dto.password
+      ? {
+          passwordHash: await bcrypt.hash(dto.password, 10),
+          passwordChangedAt: new Date(),
+          mustResetPassword: true,
+        }
+      : {};
 
-    // Update manager basic info
-    await this.prisma.manager.update({
-      where: { id: managerId },
-      data: updateData,
+    const buildingAssignments = dto.buildingAssignments;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.manager.update({
+        where: { id: managerId },
+        data: { ...updateData, ...passwordData },
+      });
+
+      if (buildingAssignments) {
+        // Replace the live building roles (history rows stay soft-deleted)
+        await tx.managerBuildingRole.updateMany({
+          where: { managerId, deletedAt: null },
+          data: { deletedAt: new Date(), deletedById: userId },
+        });
+
+        await tx.managerBuildingRole.createMany({
+          data: buildingAssignments.map((assignment) => ({
+            managerId,
+            buildingId: assignment.buildingId,
+            roles: assignment.roles,
+          })),
+        });
+      }
     });
-
-    // Update building assignments if provided
-    if (dto.buildingAssignments) {
-      // Soft-delete existing building roles
-      await this.prisma.managerBuildingRole.updateMany({
-        where: { managerId },
-        data: { deletedAt: new Date(), deletedById: userId } as {
-          deletedAt: Date;
-          deletedById: string;
-        },
-      });
-
-      // Create new building roles
-      await this.prisma.managerBuildingRole.createMany({
-        data: dto.buildingAssignments.map((assignment) => ({
-          managerId,
-          buildingId: assignment.buildingId,
-          roles: assignment.roles,
-        })),
-      });
-    }
 
     // Return updated manager with building assignments
     const managerWithRoles = await this.prisma.manager.findFirst({

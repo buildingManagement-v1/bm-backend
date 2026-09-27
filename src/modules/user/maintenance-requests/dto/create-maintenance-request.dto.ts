@@ -1,14 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsEnum,
+  IsNotEmpty,
+  MaxLength,
+} from 'class-validator';
 import { MaintenanceRequestPriority } from 'generated/prisma/enums';
 
 export class CreateMaintenanceRequestDto {
   @ApiProperty({ example: 'Leaking pipe' })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
   title: string;
 
   @ApiProperty({ example: 'Water leaking in the kitchen.' })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(5000)
   description: string;
 
   @ApiProperty({
@@ -27,4 +38,13 @@ export class CreateMaintenanceRequestDto {
   @IsOptional()
   @IsUUID()
   tenantId?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "Unit concerned. Defaults to the tenant's leased unit; omit both for common areas",
+  })
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
 }

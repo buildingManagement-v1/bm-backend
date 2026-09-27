@@ -7,6 +7,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { AuthRateLimit } from 'src/common/throttle/throttle.constants';
 import { AuthService } from './auth.service';
 import {
   LoginManagerDto,
@@ -23,12 +24,14 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ManagerGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('Manager Auth')
 @Controller('v1/manager/auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @AuthRateLimit()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Manager login' })
@@ -42,8 +45,9 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ManagerGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change manager password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
@@ -59,7 +63,7 @@ export class AuthController {
   }
 
   @Patch('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ManagerGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update my email' })
   @ApiResponse({ status: 200, description: 'Email updated successfully' })
@@ -71,6 +75,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset OTP' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
@@ -82,6 +87,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -93,6 +99,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })

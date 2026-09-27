@@ -19,7 +19,7 @@ import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 @ApiTags('Reports')
 @ApiBearerAuth()
 @Controller('v1/app/reports')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
@@ -52,7 +52,7 @@ export class ReportsController {
   }
 
   @Get('revenue')
-  @UseGuards(ManagerRolesGuard, SubscriptionGuard)
+  @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.reports_viewer)
   @ApiOperation({ summary: 'Get revenue report' })
   @ApiResponse({ status: 200, description: 'Return revenue report' })

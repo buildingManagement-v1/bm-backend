@@ -2,48 +2,43 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsNumber,
-  IsObject,
   IsEnum,
   IsOptional,
+  IsNotEmpty,
   Min,
+  MaxLength,
+  ValidateNested,
 } from 'class-validator';
-import { PlanStatus } from 'generated/prisma/client';
+import { Type } from 'class-transformer';
+import { PlanStatus } from 'generated/prisma/enums';
+import { PlanFeaturesDto } from './plan-features.dto';
 
 export class UpdatePlanDto {
-  @ApiProperty({ example: 'Gold Plan', required: false })
+  @ApiProperty({ required: false })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ example: 499.99, required: false })
-  @IsNumber()
+  @ApiProperty({ required: false, description: 'Yearly price (ETB)' })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
   price?: number;
 
-  @ApiProperty({
-    example: {
-      maxBuildings: 5,
-      maxUnits: 50,
-      maxManagers: 7,
-      premiumFeatures: [],
-    },
-    required: false,
-  })
-  @IsObject()
+  @ApiProperty({ type: PlanFeaturesDto, required: false })
+  @ValidateNested()
+  @Type(() => PlanFeaturesDto)
   @IsOptional()
-  features?: Record<string, any>;
+  features?: PlanFeaturesDto;
 
   @ApiProperty({ enum: PlanStatus, required: false })
   @IsEnum(PlanStatus)
   @IsOptional()
   status?: PlanStatus;
 
-  @ApiProperty({
-    enum: ['public', 'custom'],
-    example: 'public',
-    required: false,
-  })
+  @ApiProperty({ enum: ['public', 'custom'], required: false })
   @IsEnum(['public', 'custom'])
   @IsOptional()
   type?: 'public' | 'custom';

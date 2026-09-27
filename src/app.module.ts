@@ -1,3 +1,12 @@
+import { BroadcastsModule } from './modules/platform-admin/broadcasts/broadcasts.module';
+import { SettingsModule } from './modules/platform-admin/settings/settings.module';
+import { AnalyticsModule } from './modules/platform-admin/analytics/analytics.module';
+import { LoginAdvertsModule } from './modules/platform-admin/login-adverts/login-adverts.module';
+import { AnnouncementsModule } from './modules/user/announcements/announcements.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthThrottlerGuard } from './common/throttle/auth-throttler.guard';
 import {
   MiddlewareConsumer,
   Module,
@@ -78,7 +87,16 @@ import { AppVersionModule } from './modules/platform-admin/app-version/app-versi
     SchedulerModule,
     NotificationsModule,
     PlanLimitsModule,
+    BillingModule,
+    AnnouncementsModule,
+    LoginAdvertsModule,
+    AnalyticsModule,
+    SettingsModule,
+    BroadcastsModule,
+    // Generous global ceiling; auth endpoints opt into a strict limit
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 600 }]),
   ],
+  providers: [{ provide: APP_GUARD, useClass: AuthThrottlerGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
@@ -98,6 +116,7 @@ export class AppModule implements NestModule {
         'v1/app/reports',
         'v1/app/dashboard',
         'v1/app/activity-logs',
+        'v1/app/announcements',
       );
   }
 }

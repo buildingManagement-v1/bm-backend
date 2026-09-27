@@ -3,67 +3,70 @@ import {
   IsDateString,
   IsNumber,
   IsOptional,
-  IsEnum,
   IsBoolean,
   IsInt,
+  IsObject,
+  IsPositive,
   Min,
   Max,
 } from 'class-validator';
-import { LeaseStatus } from 'generated/prisma/enums';
 
+/**
+ * Edits an active lease. Rent, dates and payment-day changes re-price only the
+ * cycles that haven't started and aren't paid; to end a lease early use the
+ * terminate endpoint.
+ */
 export class UpdateLeaseDto {
-  @ApiProperty({ example: '2023-01-01T00:00:00Z', required: false })
+  @ApiProperty({
+    required: false,
+    description: 'Only while no cycle has started or been paid',
+  })
   @IsDateString()
   @IsOptional()
   startDate?: string;
 
-  @ApiProperty({ example: '2024-01-01T00:00:00Z', required: false })
+  @ApiProperty({ required: false })
   @IsDateString()
   @IsOptional()
   endDate?: string;
 
-  @ApiProperty({ example: 1000, required: false })
-  @IsNumber()
+  @ApiProperty({ required: false })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   @IsOptional()
   rentAmount?: number;
 
-  @ApiProperty({ example: 1000, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   securityDeposit?: number;
 
-  @ApiProperty({ example: 1, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   carsAllowed?: number;
 
-  @ApiProperty({ example: true, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   useDefaultPaymentDay?: boolean;
 
-  @ApiProperty({ example: 1, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(31)
   paymentCollectionDay?: number;
 
-  @ApiProperty({ example: false, required: false })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   applyWithholding?: boolean;
 
-  @ApiProperty({
-    enum: LeaseStatus,
-    example: LeaseStatus['active'],
-    required: false,
-  })
-  @IsEnum(LeaseStatus as object)
+  @ApiProperty({ required: false })
   @IsOptional()
-  status?: LeaseStatus;
-
-  @ApiProperty({ example: { petPolicy: 'allowed' }, required: false })
-  @IsOptional()
-  terms?: any;
+  @IsObject()
+  terms?: Record<string, unknown>;
 }

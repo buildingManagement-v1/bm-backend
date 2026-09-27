@@ -6,9 +6,12 @@ import {
   IsInt,
   IsNumber,
   IsEnum,
+  IsIn,
+  IsPositive,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { UnitType, UnitStatus } from 'generated/prisma/client';
+import { UnitType } from 'generated/prisma/client';
 
 export class CreateUnitDto {
   @ApiProperty({ example: 'NB-101' })
@@ -25,6 +28,7 @@ export class CreateUnitDto {
   @ApiProperty({ example: 850.5, required: false })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   @Type(() => Number)
   size?: number;
 
@@ -39,16 +43,18 @@ export class CreateUnitDto {
 
   @ApiProperty({ example: 1200.0 })
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsNotEmpty()
+  @IsPositive()
   @Type(() => Number)
   rentPrice: number;
 
   @ApiProperty({
-    enum: UnitStatus,
-    example: UnitStatus.occupied,
+    enum: ['vacant', 'inactive'],
+    example: 'vacant',
     required: false,
+    description:
+      'Occupied is set automatically by leases; inactive takes the unit off the market',
   })
   @IsOptional()
-  @IsEnum(UnitStatus)
-  status?: UnitStatus;
+  @IsIn(['vacant', 'inactive'])
+  status?: 'vacant' | 'inactive';
 }

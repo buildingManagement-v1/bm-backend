@@ -7,10 +7,11 @@ import {
   RegisterDeviceTokenDto,
   UnregisterDeviceTokenDto,
 } from 'src/common/device-token/dto/register-device-token.dto';
+import { TenantGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('Tenant Device Token')
 @Controller('v1/tenant/device-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TenantGuard)
 @ApiBearerAuth()
 export class TenantDeviceTokenController {
   constructor(private readonly deviceTokenService: DeviceTokenService) {}

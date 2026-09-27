@@ -6,6 +6,8 @@ import {
   IsEnum,
   IsOptional,
   IsArray,
+  ArrayNotEmpty,
+  ArrayUnique,
   IsUUID,
   ValidateNested,
 } from 'class-validator';
@@ -19,6 +21,8 @@ class BuildingRoleAssignment {
 
   @ApiProperty({ example: ['property_manager'] })
   @IsArray()
+  @ArrayNotEmpty()
+  @IsEnum(ManagerRole, { each: true })
   roles: ManagerRole[];
 }
 
@@ -55,6 +59,10 @@ export class UpdateManagerDto {
 
   @ApiProperty({ type: [BuildingRoleAssignment], required: false })
   @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique((a: BuildingRoleAssignment) => a.buildingId, {
+    message: 'Each building can only be assigned once',
+  })
   @ValidateNested({ each: true })
   @Type(() => BuildingRoleAssignment)
   @IsOptional()

@@ -103,4 +103,10 @@ docker compose run --rm -e RUN_MIGRATIONS=true app true
   publishes it past ufw. Optional hardening: bind it to `127.0.0.1` so HTTPS is the only
   public entrypoint.
 - **No dedicated health endpoint** yet; `GET /api` (200) works as a probe.
+- **Proxy / rate limiting**: auth endpoints are rate-limited per client IP+email. In production the app
+  trusts one proxy hop (`TRUST_PROXY`, default `1` when `NODE_ENV=production`), so nginx must send
+  `X-Forwarded-For` (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+- **Billing**: set `BILLING_PAYMENT_INSTRUCTIONS` in `.env` to the bank account/instructions owners see when
+  buying a plan. `APP_TIMEZONE` (default `Africa/Addis_Ababa`) drives "today" and cron times.
+- **Uploads** now also hold `subscription-receipts/` and `adverts/` next to `receipts/`.
 - **TLS** auto-renews via certbot's scheduled task; cert is per-domain (separate from arifget).

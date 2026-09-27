@@ -8,7 +8,6 @@ import { Prisma } from 'generated/prisma/client';
 import { buildPageInfo } from 'src/common/pagination';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
-import * as path from 'path';
 
 const requestInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -159,7 +158,6 @@ export class PaymentRequestsService {
     if (!request) {
       throw new NotFoundException('Payment request not found');
     }
-    const root = process.cwd();
-    return path.join(root, 'uploads', request.receiptUrl);
+    return request.receiptUrl;
   }
 }

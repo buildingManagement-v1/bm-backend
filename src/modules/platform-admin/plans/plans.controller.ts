@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -24,7 +25,18 @@ import { User } from 'src/common/decorators/user.decorator';
 @ApiTags('Platform Admin Plans')
 @Controller('v1/platform/plans')
 export class PlansController {
-  constructor(private readonly plansService: PlansService) {}
+  constructor(
+    private readonly plansService: PlansService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async adminName(id: string): Promise<string> {
+    const admin = await this.prisma.platformAdmin.findUnique({
+      where: { id },
+      select: { name: true },
+    });
+    return admin?.name ?? 'Unknown admin';
+  }
 
   @Get('public')
   @ApiOperation({ summary: 'Get all active plans' })
@@ -47,7 +59,11 @@ export class PlansController {
     @Body() dto: CreatePlanDto,
     @User() admin: { id: string; email: string },
   ) {
-    const result = await this.plansService.create(dto, admin.id, admin.email);
+    const result = await this.plansService.create(
+      dto,
+      admin.id,
+      await this.adminName(admin.id),
+    );
     return {
       success: true,
       data: result,
@@ -110,7 +126,7 @@ export class PlansController {
       id,
       dto,
       admin.id,
-      admin.email,
+      await this.adminName(admin.id),
     );
     return {
       success: true,
@@ -129,7 +145,11 @@ export class PlansController {
     @Param('id') id: string,
     @User() admin: { id: string; email: string },
   ) {
-    const result = await this.plansService.remove(id, admin.id, admin.email);
+    const result = await this.plansService.remove(
+      id,
+      admin.id,
+      await this.adminName(admin.id),
+    );
     return {
       success: true,
       data: result,

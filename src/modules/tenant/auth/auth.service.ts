@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
@@ -13,6 +17,13 @@ import { ActivityLogsService } from '../../user/activity-logs/activity-logs.serv
 import { OtpType, UserType } from 'generated/prisma/client';
 import { Prisma } from 'generated/prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  AuthTokenPayload,
+  issuedBeforePasswordChange,
+  signAccessToken,
+  signAuthTokens,
+  verifyRefreshToken,
+} from 'src/common/token/auth-tokens';
 
 @Injectable()
 export class TenantAuthService {
@@ -26,7 +37,12 @@ export class TenantAuthService {
 
   async login(dto: TenantLoginDto) {
     const candidates = await this.prisma.tenant.findMany({
-      where: { email: dto.email, deletedAt: null },
+      where: {
+        email: dto.email,
+        deletedAt: null,
+        building: { deletedAt: null },
+        ...(dto.buildingId ? { buildingId: dto.buildingId } : {}),
+      },
       include: {
         building: {
           select: {
@@ -37,44 +53,39 @@ export class TenantAuthService {
       },
     });
 
-    if (candidates.length === 0) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Same email can exist in multiple buildings (each has its own password)
-    let tenant: (typeof candidates)[0] | null = null;
+    // Same email can exist in multiple buildings, each with its own password
+    const matches: typeof candidates = [];
     for (const t of candidates) {
-      if (!t.passwordHash) continue;
-      if (t.status === 'inactive') continue;
-      const match = await bcrypt.compare(dto.password, t.passwordHash);
-      if (match) {
-        tenant = t;
-        break;
+      if (!t.passwordHash || t.status === 'inactive') continue;
+      if (await bcrypt.compare(dto.password, t.passwordHash)) {
+        matches.push(t);
       }
     }
 
-    if (!tenant) {
+    if (matches.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    if (matches.length > 1) {
+      throw new ConflictException({
+        message: 'Your account exists in more than one building. Choose one.',
+        code: 'BUILDING_SELECTION_REQUIRED',
+        buildings: matches.map((t) => t.building),
+      });
+    }
+
+    const tenant = matches[0];
 
     await this.prisma.tenant.update({
       where: { id: tenant.id },
       data: { lastLoginAt: new Date() },
     });
 
-    const payload = {
-      sub: tenant.id,
-      email: tenant.email,
-      role: 'tenant',
-      type: 'tenant',
-      buildingId: tenant.buildingId,
-    };
-
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshExpiry = dto.rememberMe === false ? '24h' : '30d';
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: refreshExpiry,
-    });
+    const { accessToken, refreshToken } = signAuthTokens(
+      this.jwtService,
+      this.payloadFor(tenant),
+      dto.rememberMe === false ? '24h' : '30d',
+    );
 
     return {
       accessToken,
@@ -90,45 +101,48 @@ export class TenantAuthService {
   }
 
   async requestOtp(dto: RequestOtpDto) {
-    const tenant = await this.prisma.tenant.findFirst({
+    const tenants = await this.prisma.tenant.findMany({
       where: { email: dto.email, deletedAt: null },
+      select: { id: true, email: true },
     });
 
-    if (!tenant) {
+    if (tenants.length === 0) {
       return { message: 'If email exists, OTP has been sent' };
     }
 
+    // One code for every building this email is a tenant in
     const otp = await this.tokenService.createOTP(
-      tenant.id,
+      tenants.map((t) => t.id),
       UserType.tenant,
       OtpType.password_reset,
       10,
     );
 
-    await this.emailService.sendTenantPasswordResetEmail(tenant.email, otp);
+    await this.emailService.sendTenantPasswordResetEmail(tenants[0].email, otp);
 
     return { message: 'If email exists, OTP has been sent' };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const tenant = await this.prisma.tenant.findFirst({
+    const tenants = await this.prisma.tenant.findMany({
       where: { email: dto.email, deletedAt: null },
+      select: { id: true },
     });
 
-    if (!tenant) {
+    if (tenants.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    await this.tokenService.validateOTP(
+    const matchedIds = await this.tokenService.consumeOTP(
       dto.otp,
-      tenant.id,
+      tenants.map((t) => t.id),
       OtpType.password_reset,
     );
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
 
-    await this.prisma.tenant.update({
-      where: { id: tenant.id },
+    await this.prisma.tenant.updateMany({
+      where: { id: { in: matchedIds } },
       data: {
         passwordHash: hashedPassword,
         passwordChangedAt: new Date(),
@@ -165,7 +179,7 @@ export class TenantAuthService {
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
 
-    await this.prisma.tenant.update({
+    const updated = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
         passwordHash: hashedPassword,
@@ -185,44 +199,47 @@ export class TenantAuthService {
       details: { type: 'password_change' } as Prisma.InputJsonValue,
     });
 
-    return { message: 'Password changed successfully' };
+    // Older sessions are revoked by passwordChangedAt; hand this one new tokens
+    return {
+      message: 'Password changed successfully',
+      ...signAuthTokens(this.jwtService, this.payloadFor(updated), '30d'),
+    };
   }
 
   async refresh(refreshToken: string) {
-    try {
-      const payload = this.jwtService.verify<{
-        sub: string;
-        email: string;
-        role: string;
-        type: string;
-        buildingId: string;
-        unitId: string | null;
-      }>(refreshToken);
-
-      const tenant = await this.prisma.tenant.findFirst({
-        where: { id: payload.sub, deletedAt: null },
-      });
-
-      if (!tenant || tenant.status === 'inactive') {
-        throw new UnauthorizedException('Invalid token');
-      }
-
-      const newPayload = {
-        sub: tenant.id,
-        email: tenant.email,
-        role: 'tenant',
-        type: 'tenant',
-        buildingId: tenant.buildingId,
-      };
-
-      const accessToken = this.jwtService.sign(newPayload, {
-        expiresIn: '15m',
-      });
-
-      return { accessToken };
-    } catch (error) {
-      console.error(error);
+    const payload = verifyRefreshToken(this.jwtService, refreshToken);
+    if (payload.type !== 'tenant') {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: payload.sub, deletedAt: null },
+    });
+
+    if (
+      !tenant ||
+      tenant.status === 'inactive' ||
+      issuedBeforePasswordChange(payload.iat, tenant.passwordChangedAt)
+    ) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return {
+      accessToken: signAccessToken(this.jwtService, this.payloadFor(tenant)),
+    };
+  }
+
+  private payloadFor(tenant: {
+    id: string;
+    email: string;
+    buildingId: string;
+  }): AuthTokenPayload {
+    return {
+      sub: tenant.id,
+      email: tenant.email,
+      role: 'tenant',
+      type: 'tenant',
+      buildingId: tenant.buildingId,
+    };
   }
 }

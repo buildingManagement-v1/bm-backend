@@ -15,7 +15,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { LeasesService } from './leases.service';
-import { CreateLeaseDto, UpdateLeaseDto } from './dto';
+import { CreateLeaseDto, TerminateLeaseDto, UpdateLeaseDto } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { BuildingAccessGuard } from '../../../common/guards/building-access.guard';
 import { ManagerRolesGuard } from '../../../common/guards/manager-roles.guard';
@@ -103,6 +103,34 @@ export class LeasesController {
       success: true,
       data: result,
       message: 'Lease updated successfully',
+    };
+  }
+
+  @Post(':id/terminate')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(ManagerRole.tenant_manager)
+  @ApiOperation({
+    summary:
+      'Terminate an active lease early (prorates rent to the effective date, frees the unit)',
+  })
+  @ApiResponse({ status: 201, description: 'Lease terminated' })
+  async terminate(
+    @BuildingId() buildingId: string,
+    @Param('id') id: string,
+    @Body() dto: TerminateLeaseDto,
+    @User() user: { id: string; role: string },
+  ) {
+    const result = await this.leasesService.terminate(
+      id,
+      buildingId,
+      dto,
+      user.id,
+      user.role,
+    );
+    return {
+      success: true,
+      data: result,
+      message: result.message,
     };
   }
 

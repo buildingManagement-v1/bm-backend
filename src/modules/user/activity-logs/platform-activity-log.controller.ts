@@ -36,13 +36,16 @@ export class PlatformActivityLogsController {
     @Query('endDate') endDate?: string,
     @Query('entityType') entityType?: ActivityEntityType,
     @Query('action') action?: ActivityAction,
+    @Query('adminId') adminId?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    const result = await this.activityLogsService.findAllPlatform({
-      startDate,
-      endDate,
-      entityType,
-      action,
-    });
-    return { success: true, data: result };
+    const result = await this.activityLogsService.findAllPlatform(
+      { startDate, endDate, entityType, action, adminId, q },
+      Math.min(100, Math.max(1, Number(limit) || 50)),
+      Math.max(0, Number(offset) || 0),
+    );
+    return { success: true, ...result };
   }
 }

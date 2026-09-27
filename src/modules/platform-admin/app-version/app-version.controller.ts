@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -15,7 +16,18 @@ import { User } from 'src/common/decorators/user.decorator';
 @ApiTags('Platform Admin App Version')
 @Controller('v1/platform/app-version')
 export class AppVersionController {
-  constructor(private readonly appVersionService: AppVersionService) {}
+  constructor(
+    private readonly appVersionService: AppVersionService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  private async adminName(id: string): Promise<string> {
+    const admin = await this.prisma.platformAdmin.findUnique({
+      where: { id },
+      select: { name: true },
+    });
+    return admin?.name ?? 'Unknown admin';
+  }
 
   @Get('public')
   @ApiOperation({
@@ -60,7 +72,7 @@ export class AppVersionController {
     const result = await this.appVersionService.update(
       dto,
       admin.id,
-      admin.email,
+      await this.adminName(admin.id),
     );
     return {
       success: true,

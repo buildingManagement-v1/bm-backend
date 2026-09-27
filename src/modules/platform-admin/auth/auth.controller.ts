@@ -6,6 +6,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { AuthRateLimit } from 'src/common/throttle/throttle.constants';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -27,12 +28,14 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
+import { PlatformGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('Platform Admin Auth')
 @Controller('v1/platform/auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @AuthRateLimit()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Platform admin login' })
@@ -52,8 +55,8 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create new admin' })
   @ApiResponse({ status: 201, description: 'Admin created successfully' })
-  async createAdmin(@Body() dto: CreateAdminDto) {
-    const result = await this.authService.createAdmin(dto);
+  async createAdmin(@Body() dto: CreateAdminDto, @User() user: { id: string }) {
+    const result = await this.authService.createAdmin(dto, user.id);
     return {
       success: true,
       data: result,
@@ -95,8 +98,12 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update admin' })
   @ApiResponse({ status: 200, description: 'Admin updated successfully' })
-  async updateAdmin(@Param('id') id: string, @Body() dto: UpdateAdminDto) {
-    const result = await this.authService.updateAdmin(id, dto);
+  async updateAdmin(
+    @Param('id') id: string,
+    @Body() dto: UpdateAdminDto,
+    @User() user: { id: string },
+  ) {
+    const result = await this.authService.updateAdmin(id, dto, user.id);
     return {
       success: true,
       data: result,
@@ -110,16 +117,17 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete admin' })
   @ApiResponse({ status: 200, description: 'Admin deleted successfully' })
-  async deleteAdmin(@Param('id') id: string) {
-    const result = await this.authService.deleteAdmin(id);
+  async deleteAdmin(@Param('id') id: string, @User() user: { id: string }) {
+    const result = await this.authService.deleteAdmin(id, user.id);
     return {
       success: true,
       data: result,
     };
   }
 
+  @AuthRateLimit()
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PlatformGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
@@ -134,6 +142,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset OTP' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
@@ -145,6 +154,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -156,6 +166,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })

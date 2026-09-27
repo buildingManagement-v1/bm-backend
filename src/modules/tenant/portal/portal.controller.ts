@@ -12,7 +12,6 @@ import {
   Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { StreamableFile } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   ApiBearerAuth,
@@ -25,13 +24,19 @@ import {
 import { PortalService } from './portal.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { User } from 'src/common/decorators/user.decorator';
-import { SubmitMaintenanceRequestDto } from './dto';
+import {
+  CreatePaymentRequestDto,
+  SubmitMaintenanceRequestDto,
+  UpdateTenantProfileDto,
+} from './dto';
+import { streamUpload } from 'src/common/uploads/uploads.util';
 import type { StorageEngine } from 'multer';
 import multer from 'multer';
+import { TenantGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('Tenant Portal')
 @Controller('v1/tenant')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TenantGuard)
 @ApiBearerAuth()
 export class PortalController {
   constructor(private readonly portalService: PortalService) {}
@@ -44,13 +49,13 @@ export class PortalController {
   }
 
   @Patch('profile')
-  @ApiOperation({ summary: 'Update tenant profile (email)' })
+  @ApiOperation({ summary: 'Update my phone or email' })
   @ApiResponse({ status: 200, description: 'Profile updated' })
   async updateProfile(
     @User() user: { id: string },
-    @Body() body: { email?: string },
+    @Body() dto: UpdateTenantProfileDto,
   ) {
-    return await this.portalService.updateProfile(user.id, body);
+    return await this.portalService.updateProfile(user.id, dto);
   }
 
   @Get('rent-status')
@@ -149,36 +154,10 @@ export class PortalController {
   @ApiResponse({ status: 201, description: 'Payment request submitted' })
   async createPaymentRequest(
     @User() user: { id: string },
-    @Body() body: Record<string, unknown>,
+    @Body() dto: CreatePaymentRequestDto,
     @UploadedFile() file: { buffer: Buffer; originalname?: string },
   ) {
-    let monthsCovered: string[] | undefined;
-    const rawMonths = body.monthsCovered;
-    if (typeof rawMonths === 'string' && rawMonths !== '') {
-      try {
-        const parsed: unknown = JSON.parse(rawMonths);
-        monthsCovered =
-          Array.isArray(parsed) &&
-          parsed.every((x): x is string => typeof x === 'string')
-            ? parsed
-            : undefined;
-      } catch {
-        monthsCovered = undefined;
-      }
-    }
-    const notes = typeof body.notes === 'string' ? body.notes : undefined;
-    return await this.portalService.createPaymentRequest(
-      user.id,
-      {
-        unitId: String(body.unitId),
-        amount: Number(body.amount),
-        type: String(body.type),
-        paymentDate: String(body.paymentDate),
-        monthsCovered: monthsCovered ?? undefined,
-        notes,
-      },
-      file,
-    );
+    return await this.portalService.createPaymentRequest(user.id, dto, file);
   }
 
   @Get('payment-calendar')
@@ -263,10 +242,8 @@ export class PortalController {
     @User() user: { id: string },
     @Param('id') id: string,
   ) {
-    const filePath = await this.portalService.getReceiptPath(user.id, id);
-    const { createReadStream } = await import('fs');
-    const stream = createReadStream(filePath);
-    return new StreamableFile(stream);
+    const receiptUrl = await this.portalService.getReceiptPath(user.id, id);
+    return streamUpload(receiptUrl);
   }
 
   @Post('parking-requests')

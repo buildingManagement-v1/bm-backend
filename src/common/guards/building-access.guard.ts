@@ -37,8 +37,12 @@ export class BuildingAccessGuard implements CanActivate {
       throw new ForbiddenException('Building context not set');
     }
 
+    if (user.type !== 'app') {
+      throw new ForbiddenException('You do not have access to this building');
+    }
+
     // If user is building owner
-    if (user.role !== 'manager') {
+    if (user.role === 'owner') {
       const building = await this.prisma.building.findFirst({
         where: whereActive({ id: buildingId }),
         select: { userId: true },
@@ -55,9 +59,20 @@ export class BuildingAccessGuard implements CanActivate {
       return true;
     }
 
-    // If user is manager
+    // Managers: check the live assignment, not the JWT snapshot, so revoked
+    // or deactivated managers lose access immediately
     if (user.role === 'manager') {
-      if (!user.buildings || !user.buildings.includes(buildingId)) {
+      const assignment = await this.prisma.managerBuildingRole.findFirst({
+        where: whereActive({
+          managerId: user.id,
+          buildingId,
+          manager: { deletedAt: null, status: 'active' as const },
+          building: { deletedAt: null },
+        }),
+        select: { id: true },
+      });
+
+      if (!assignment) {
         throw new ForbiddenException('You do not have access to this building');
       }
 

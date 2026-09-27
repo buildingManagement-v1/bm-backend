@@ -1,4 +1,5 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { AppUserGuard } from 'src/common/guards/user-type.guards';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -8,14 +9,13 @@ import {
 import { ReportsService } from './reports.service';
 import { ManagerRole } from 'generated/prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import { ManagerRolesGuard } from 'src/common/guards/manager-roles.guard';
 import { RequireManagerRoles } from 'src/common/decorators/require-manager-roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
 
 @ApiTags('Reports')
 @ApiBearerAuth()
 @Controller('v1/app/reports')
-@UseGuards(JwtAuthGuard, ManagerRolesGuard)
+@UseGuards(JwtAuthGuard, AppUserGuard)
 @RequireManagerRoles(ManagerRole.reports_viewer)
 export class ReportsPortfolioController {
   constructor(private readonly reportsService: ReportsService) {}

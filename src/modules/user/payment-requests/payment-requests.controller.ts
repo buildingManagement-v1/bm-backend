@@ -7,7 +7,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { StreamableFile } from '@nestjs/common';
+import { streamUpload } from 'src/common/uploads/uploads.util';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -139,12 +139,10 @@ export class PaymentRequestsController {
   @ApiOperation({ summary: 'Get receipt image for a payment request' })
   @ApiResponse({ status: 200, description: 'Receipt image file' })
   async getReceipt(@BuildingId() buildingId: string, @Param('id') id: string) {
-    const filePath = await this.paymentRequestsService.getReceiptPath(
+    const receiptUrl = await this.paymentRequestsService.getReceiptPath(
       id,
       buildingId,
     );
-    const { createReadStream } = await import('fs');
-    const stream = createReadStream(filePath);
-    return new StreamableFile(stream);
+    return streamUpload(receiptUrl);
   }
 }
