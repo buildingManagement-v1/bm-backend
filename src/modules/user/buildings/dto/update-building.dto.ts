@@ -91,7 +91,7 @@ export class UpdateBuildingDto {
   })
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(31)
   @IsOptional()
   paymentCollectionDay?: number;
 
@@ -104,4 +104,16 @@ export class UpdateBuildingDto {
   @Min(0)
   @IsOptional()
   totalParkingLots?: number;
+
+  @ApiProperty({
+    example: 5,
+    required: false,
+    description:
+      'Days after the rent collection day before unpaid rent is marked overdue (default 5)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(28)
+  paymentGraceDays?: number;
 }

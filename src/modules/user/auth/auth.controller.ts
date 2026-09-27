@@ -8,6 +8,7 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { AuthRateLimit } from 'src/common/throttle/throttle.constants';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -26,12 +27,14 @@ import {
 } from './dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { User } from 'src/common/decorators/user.decorator';
+import { OwnerGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('User Auth')
 @Controller('v1/app/auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @AuthRateLimit()
   @Post('register')
   @ApiOperation({ summary: 'Register user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
@@ -44,6 +47,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login user' })
@@ -57,6 +61,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset OTP' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
@@ -68,6 +73,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -79,8 +85,9 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnerGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
@@ -96,7 +103,7 @@ export class AuthController {
   }
 
   @Patch('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnerGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update my email' })
   @ApiResponse({ status: 200, description: 'Email updated successfully' })
@@ -109,7 +116,7 @@ export class AuthController {
   }
 
   @Delete('account')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnerGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -129,6 +136,7 @@ export class AuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })

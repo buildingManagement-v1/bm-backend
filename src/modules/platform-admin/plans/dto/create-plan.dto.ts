@@ -3,10 +3,13 @@ import {
   IsString,
   IsNotEmpty,
   IsNumber,
-  IsObject,
   IsEnum,
   Min,
+  MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { PlanFeaturesDto } from './plan-features.dto';
 
 export class CreatePlanDto {
   @ApiProperty({
@@ -15,29 +18,27 @@ export class CreatePlanDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(60)
   name: string;
 
-  @ApiProperty({ example: 499.99, description: 'Yearly price of the plan' })
-  @IsNumber()
+  @ApiProperty({
+    example: 499.99,
+    description: 'Yearly price of the plan (ETB)',
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   price: number;
 
-  @ApiProperty({
-    example: {
-      maxBuildings: 5,
-      maxUnits: 50,
-      maxManagers: 7,
-      premiumFeatures: ['hr_module', 'advanced_reports'],
-    },
-    description: 'Plan features and limits',
-  })
-  @IsObject()
-  features: Record<string, any>;
+  @ApiProperty({ type: PlanFeaturesDto, description: 'Plan limits' })
+  @ValidateNested()
+  @Type(() => PlanFeaturesDto)
+  features: PlanFeaturesDto;
 
   @ApiProperty({
     enum: ['public', 'custom'],
     example: 'public',
-    description: 'Plan visibility type',
+    description:
+      'public plans are listed to owners; custom plans are only assigned by an admin',
   })
   @IsEnum(['public', 'custom'])
   type: 'public' | 'custom';

@@ -2,10 +2,23 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
-import { SubmitMaintenanceRequestDto } from './dto';
+import {
+  CreatePaymentRequestDto,
+  SubmitMaintenanceRequestDto,
+  UpdateTenantProfileDto,
+} from './dto';
+import { saveUpload } from 'src/common/uploads/uploads.util';
+import {
+  roundMoney,
+  toUtcDate,
+  todayDate,
+} from 'src/common/lease/lease-cycles.util';
+import * as bcrypt from 'bcrypt';
 import { NotificationsService } from 'src/common/notifications/notifications.service';
 import { ActivityLogsService } from 'src/modules/user/activity-logs/activity-logs.service';
 import { EmailService } from 'src/common/email/email.service';
@@ -17,9 +30,6 @@ import {
 } from 'src/common/tax/rent-period.util';
 import { PdfService } from 'src/common/pdf/pdf.service';
 import { parseInvoiceItems } from 'src/common/pdf/invoice-items.util';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { randomUUID } from 'crypto';
 
 @Injectable()
 export class PortalService {
@@ -117,33 +127,44 @@ export class PortalService {
     };
   }
 
-  async updateProfile(tenantId: string, body: { email?: string }) {
-    let buildingId: string | undefined;
+  async updateProfile(tenantId: string, dto: UpdateTenantProfileDto) {
+    const current = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null },
+    });
+    if (!current) {
+      throw new NotFoundException('Tenant not found');
+    }
+    const buildingId = current.buildingId;
+    const body = {
+      email:
+        dto.email !== undefined && dto.email !== current.email
+          ? dto.email.trim().toLowerCase()
+          : undefined,
+    };
+
     if (body.email !== undefined) {
-      const current = await this.prisma.tenant.findFirst({
-        where: { id: tenantId, deletedAt: null },
-        select: { buildingId: true },
+      // Email is the login id and where invoices go: confirm it's really them
+      if (
+        !current.passwordHash ||
+        !dto.currentPassword ||
+        !(await bcrypt.compare(dto.currentPassword, current.passwordHash))
+      ) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+      const existing = await this.prisma.tenant.findFirst({
+        where: { buildingId, email: body.email, deletedAt: null },
       });
-      buildingId = current?.buildingId;
-      if (current) {
-        const existing = await this.prisma.tenant.findFirst({
-          where: {
-            buildingId: current.buildingId,
-            email: body.email,
-            deletedAt: null,
-          },
-        });
-        if (existing && existing.id !== tenantId) {
-          throw new BadRequestException(
-            'A tenant with this email already exists in this building',
-          );
-        }
+      if (existing && existing.id !== tenantId) {
+        throw new BadRequestException(
+          'A tenant with this email already exists in this building',
+        );
       }
     }
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
         ...(body.email !== undefined && { email: body.email }),
+        ...(dto.phone !== undefined && { phone: dto.phone.trim() || null }),
       },
       select: {
         id: true,
@@ -179,11 +200,7 @@ export class PortalService {
 
   async getRentStatus(tenantId: string) {
     const leases = await this.prisma.lease.findMany({
-      where: {
-        tenantId,
-        status: 'active',
-        deletedAt: null,
-      },
+      where: this.leasesWithRentWhere(tenantId),
       orderBy: { startDate: 'desc' },
       include: {
         unit: {
@@ -204,6 +221,32 @@ export class PortalService {
       success: true,
       data: leases,
     };
+  }
+
+  /** Current leases, plus ended ones that still have rent owing. */
+  private leasesWithRentWhere(tenantId: string): Prisma.LeaseWhereInput {
+    return {
+      tenantId,
+      deletedAt: null,
+      OR: [
+        { status: 'active' },
+        { paymentPeriods: { some: { status: { in: ['unpaid', 'overdue'] } } } },
+      ],
+    };
+  }
+
+  /** Rent total the tenant actually pays for a base amount (VAT − WHT). */
+  private async rentTotaller(tenantId: string) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: {
+        building: { select: { vatRate: true, withholdingRate: true } },
+      },
+    });
+    const vat = Number(tenant?.building.vatRate ?? 0);
+    const wht = Number(tenant?.building.withholdingRate ?? 0);
+    return (base: number, applyWithholding: boolean) =>
+      computeRentTaxBreakdown(base, vat, wht, applyWithholding).totalAmount;
   }
 
   async getPaymentHistory(tenantId: string, limit = 20, offset = 0) {
@@ -285,12 +328,18 @@ export class PortalService {
       where: { tenantId, status: 'active', deletedAt: null },
       select: { unitId: true },
     });
+    // Only current tenants can report issues in the building
+    if (!activeLease) {
+      throw new BadRequestException(
+        'You need an active lease to submit maintenance requests',
+      );
+    }
 
     const request = await this.prisma.maintenanceRequest.create({
       data: {
         buildingId: tenant.buildingId,
         tenantId,
-        unitId: activeLease?.unitId,
+        unitId: activeLease.unitId,
         title: dto.title,
         description: dto.description,
         priority: dto.priority || 'medium',
@@ -399,26 +448,11 @@ export class PortalService {
     };
   }
 
-  private getReceiptsDir(): string {
-    const root = process.cwd();
-    return path.join(root, 'uploads', 'receipts');
-  }
-
   async createPaymentRequest(
     tenantId: string,
-    body: {
-      unitId: string;
-      amount: number;
-      type: string;
-      paymentDate: string;
-      monthsCovered?: string[];
-      notes?: string;
-    },
-    file: { buffer: Buffer; originalname?: string },
+    body: CreatePaymentRequestDto,
+    file: { buffer: Buffer; originalname?: string } | undefined,
   ) {
-    if (!file?.buffer) {
-      throw new BadRequestException('Receipt image is required');
-    }
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: tenantId, deletedAt: null },
       select: { buildingId: true },
@@ -426,38 +460,68 @@ export class PortalService {
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
+
+    if (toUtcDate(body.paymentDate) > todayDate()) {
+      throw new BadRequestException('Payment date cannot be in the future');
+    }
+
+    const months = [...new Set(body.monthsCovered ?? [])];
+    if (body.type === 'rent' && months.length === 0) {
+      throw new BadRequestException(
+        'Rent payment requests must cover at least one payment period',
+      );
+    }
+
+    // Rent goes to the lease that owns the periods (it may have ended with
+    // arrears); other payments to the current lease on the unit
     const lease = await this.prisma.lease.findFirst({
       where: {
         tenantId,
         unitId: body.unitId,
-        status: 'active',
         deletedAt: null,
         buildingId: tenant.buildingId,
+        ...(body.type === 'rent'
+          ? { paymentPeriods: { some: { month: { in: months } } } }
+          : { status: 'active' as const }),
       },
+      orderBy: [{ status: 'asc' }, { startDate: 'desc' }],
     });
     if (!lease) {
-      throw new BadRequestException('No active lease found for this unit');
+      throw new BadRequestException(
+        body.type === 'rent'
+          ? 'No lease with these rent periods was found for this unit'
+          : 'No active lease found for this unit',
+      );
     }
 
     // For rent: the requested amount must match the server-computed total
     // (base from the selected periods + VAT − withholding)
     if (body.type === 'rent') {
-      if (!body.monthsCovered || body.monthsCovered.length === 0) {
-        throw new BadRequestException(
-          'Rent payment requests must cover at least one payment period',
-        );
-      }
-      const [periods, building] = await Promise.all([
+      const [periods, building, pending] = await Promise.all([
         this.prisma.paymentPeriod.findMany({
-          where: { leaseId: lease.id, month: { in: body.monthsCovered } },
+          where: { leaseId: lease.id, month: { in: months } },
           select: { month: true, status: true, rentAmount: true },
         }),
         this.prisma.building.findUnique({
           where: { id: tenant.buildingId },
           select: { vatRate: true, withholdingRate: true },
         }),
+        this.prisma.tenantPaymentRequest.findMany({
+          where: { leaseId: lease.id, status: 'pending', type: 'rent' },
+          select: { monthsCovered: true },
+        }),
       ]);
-      const baseAmount = computeRentBaseAmount(periods, body.monthsCovered);
+      const alreadyRequested = pending
+        .flatMap((r) => (Array.isArray(r.monthsCovered) ? r.monthsCovered : []))
+        .filter(
+          (m): m is string => typeof m === 'string' && months.includes(m),
+        );
+      if (alreadyRequested.length > 0) {
+        throw new ConflictException(
+          `You already have a pending request for: ${[...new Set(alreadyRequested)].join(', ')}. Wait for it to be reviewed.`,
+        );
+      }
+      const baseAmount = computeRentBaseAmount(periods, months);
       const { totalAmount } = computeRentTaxBreakdown(
         baseAmount,
         Number(building?.vatRate ?? 0),
@@ -467,32 +531,23 @@ export class PortalService {
       assertRentAmountMatchesTotal(body.amount, totalAmount);
     }
 
-    const rawExt = path.extname(file.originalname ?? '') || '.jpg';
-    const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(
-      rawExt.toLowerCase(),
-    )
-      ? rawExt.toLowerCase()
-      : '.jpg';
-    const filename = `${randomUUID()}${safeExt}`;
-    const receiptsDir = this.getReceiptsDir();
-    await fs.mkdir(receiptsDir, { recursive: true });
-    const filePath = path.join(receiptsDir, filename);
-    await fs.writeFile(filePath, file.buffer);
+    const receiptUrl = await saveUpload(file, 'receipts', {
+      allowPdf: true,
+      label: 'Receipt',
+    });
 
     const request = await this.prisma.tenantPaymentRequest.create({
       data: {
         buildingId: tenant.buildingId,
         tenantId,
         leaseId: lease.id,
-        unitId: body.unitId,
+        unitId: lease.unitId,
         amount: body.amount,
-        type: body.type as 'rent' | 'utility' | 'deposit' | 'other',
+        type: body.type,
         paymentDate: new Date(body.paymentDate),
-        monthsCovered: body.monthsCovered
-          ? (body.monthsCovered as object)
-          : undefined,
+        monthsCovered: body.type === 'rent' ? months : undefined,
         notes: body.notes ?? undefined,
-        receiptUrl: `receipts/${filename}`,
+        receiptUrl,
       },
       include: {
         unit: { select: { id: true, unitNumber: true, floor: true } },
@@ -539,37 +594,12 @@ export class PortalService {
     message: string,
     link: string,
   ) {
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
-      select: { userId: true },
+    await this.notificationsService.notifyBuildingStaff(buildingId, roles, {
+      type,
+      title,
+      message,
+      link,
     });
-    if (building?.userId) {
-      await this.notificationsService.create({
-        userId: building.userId,
-        userType: 'user',
-        type,
-        title,
-        message,
-        link,
-      });
-    }
-    const managerRoles = await this.prisma.managerBuildingRole.findMany({
-      where: {
-        buildingId,
-        roles: { hasSome: roles },
-      },
-      select: { managerId: true },
-    });
-    for (const { managerId } of managerRoles) {
-      await this.notificationsService.create({
-        userId: managerId,
-        userType: 'manager',
-        type,
-        title,
-        message,
-        link,
-      });
-    }
   }
 
   async getPaymentRequests(
@@ -611,7 +641,8 @@ export class PortalService {
       where: { id: tenantId, deletedAt: null },
       include: {
         leases: {
-          where: { status: 'active', deletedAt: null },
+          where: this.leasesWithRentWhere(tenantId),
+          orderBy: { startDate: 'desc' },
           include: {
             unit: { select: { id: true, unitNumber: true, floor: true } },
             paymentPeriods: { orderBy: { month: 'asc' } },
@@ -633,6 +664,7 @@ export class PortalService {
       unitId: lease.unitId,
       unitNumber: lease.unit.unitNumber,
       unitFloor: lease.unit.floor ?? undefined,
+      status: lease.status,
       startDate: lease.startDate,
       endDate: lease.endDate,
       rentAmount: lease.rentAmount,
@@ -643,38 +675,42 @@ export class PortalService {
     }));
   }
 
+  /** Rent still to pay, oldest first; amounts include tax. */
   async getUpcomingPayments(tenantId: string, limit = 10) {
-    const periods = await this.prisma.paymentPeriod.findMany({
-      where: {
-        lease: {
-          tenantId,
-          status: 'active',
-          deletedAt: null,
+    const [periods, total] = await Promise.all([
+      this.prisma.paymentPeriod.findMany({
+        where: {
+          lease: this.leasesWithRentWhere(tenantId),
+          status: { in: ['unpaid', 'overdue'] },
         },
-        status: { in: ['unpaid', 'overdue'] },
-      },
-      orderBy: { month: 'asc' },
-      take: limit,
-      include: {
-        lease: {
-          select: {
-            id: true,
-            unit: { select: { unitNumber: true, floor: true } },
+        orderBy: [{ periodStart: 'asc' }, { month: 'asc' }],
+        take: limit,
+        include: {
+          lease: {
+            select: {
+              id: true,
+              applyWithholding: true,
+              unit: { select: { unitNumber: true, floor: true } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.rentTotaller(tenantId),
+    ]);
     return periods.map((p) => {
-      const [y, m] = p.month.split('-').map(Number);
-      const dueLabel = new Date(y, m - 1, 1).toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      });
+      const due = p.periodStart ?? new Date(`${p.month.slice(0, 7)}-01`);
       return {
         id: p.id,
         month: p.month,
-        dueLabel,
-        amount: Number(p.rentAmount),
+        dueDate: due,
+        dueLabel: due.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        }),
+        baseAmount: Number(p.rentAmount),
+        amount: total(Number(p.rentAmount), p.lease.applyWithholding),
         status: p.status as 'unpaid' | 'overdue',
         unitNumber: p.lease.unit.unitNumber,
         unitFloor: p.lease.unit.floor ?? undefined,
@@ -684,57 +720,79 @@ export class PortalService {
   }
 
   /**
-   * Dashboard stats for tenant: payment summary (paid/unpaid/overdue) and recent months for charts.
+   * Dashboard stats for the tenant, in what they actually pay (tax included):
+   * paid so far, due now, overdue, and not yet due; plus a chart of the
+   * months around today.
    */
   async getDashboardStats(tenantId: string) {
-    const periods = await this.prisma.paymentPeriod.findMany({
-      where: {
-        lease: {
-          tenantId,
-          status: 'active',
-          deletedAt: null,
+    const [periods, total] = await Promise.all([
+      this.prisma.paymentPeriod.findMany({
+        where: { lease: this.leasesWithRentWhere(tenantId) },
+        select: {
+          month: true,
+          rentAmount: true,
+          status: true,
+          periodStart: true,
+          lease: { select: { applyWithholding: true } },
         },
-      },
-      select: {
-        month: true,
-        rentAmount: true,
-        status: true,
-      },
-    });
+      }),
+      this.rentTotaller(tenantId),
+    ]);
 
+    const today = todayDate();
     let paidAmount = 0;
     let unpaidAmount = 0;
     let overdueAmount = 0;
+    let upcomingAmount = 0;
     const byMonth = new Map<string, { due: number; paid: number }>();
 
     for (const p of periods) {
-      const amount = Number(p.rentAmount);
-      if (p.status === 'paid') {
-        paidAmount += amount;
-      } else if (p.status === 'overdue') {
-        overdueAmount += amount;
-      } else {
-        unpaidAmount += amount;
-      }
-      const existing = byMonth.get(p.month) ?? { due: 0, paid: 0 };
+      const amount = total(Number(p.rentAmount), p.lease.applyWithholding);
+      const start = p.periodStart ?? new Date(`${p.month.slice(0, 7)}-01`);
+      if (p.status === 'paid') paidAmount += amount;
+      else if (p.status === 'overdue') overdueAmount += amount;
+      else if (start <= today) unpaidAmount += amount;
+      else upcomingAmount += amount;
+
+      const key = start.toISOString().slice(0, 7);
+      const existing = byMonth.get(key) ?? { due: 0, paid: 0 };
       existing.due += amount;
       if (p.status === 'paid') existing.paid += amount;
-      byMonth.set(p.month, existing);
+      byMonth.set(key, existing);
     }
 
-    const sortedMonths = [...byMonth.keys()].sort().slice(-6);
-    const recentMonths = sortedMonths.map((month) => {
-      const { due, paid } = byMonth.get(month)!;
-      const [y, m] = month.split('-').map(Number);
-      const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', {
-        month: 'short',
-        year: '2-digit',
+    // Three months back through two months ahead
+    const recentMonths: Array<{
+      month: string;
+      label: string;
+      due: number;
+      paid: number;
+    }> = [];
+    for (let offset = -3; offset <= 2; offset++) {
+      const d = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + offset, 1),
+      );
+      const month = d.toISOString().slice(0, 7);
+      const { due, paid } = byMonth.get(month) ?? { due: 0, paid: 0 };
+      recentMonths.push({
+        month,
+        label: d.toLocaleDateString('en-US', {
+          month: 'short',
+          year: '2-digit',
+          timeZone: 'UTC',
+        }),
+        due: roundMoney(due),
+        paid: roundMoney(paid),
       });
-      return { month, label, due, paid };
-    });
+    }
 
     return {
-      paymentSummary: { paidAmount, unpaidAmount, overdueAmount },
+      paymentSummary: {
+        paidAmount: roundMoney(paidAmount),
+        unpaidAmount: roundMoney(unpaidAmount),
+        overdueAmount: roundMoney(overdueAmount),
+        upcomingAmount: roundMoney(upcomingAmount),
+      },
       recentMonths,
     };
   }
@@ -767,20 +825,29 @@ export class PortalService {
     if (!lease) {
       throw new BadRequestException('No active lease found for this unit');
     }
-    const existingCount = await this.prisma.parkingRegistration.count({
-      where: { leaseId: lease.id, deletedAt: null },
-    });
-    if (existingCount >= lease.carsAllowed) {
+    // Pending requests hold a slot too, so a tenant can't queue more cars
+    // than the lease allows
+    const [existingCount, pendingCount] = await Promise.all([
+      this.prisma.parkingRegistration.count({
+        where: { leaseId: lease.id, deletedAt: null },
+      }),
+      this.prisma.tenantParkingRequest.count({
+        where: { leaseId: lease.id, status: 'pending' },
+      }),
+    ]);
+    if (existingCount + pendingCount >= lease.carsAllowed) {
       throw new BadRequestException(
-        `Parking limit reached for this lease. Maximum ${lease.carsAllowed} car(s) allowed.`,
+        lease.carsAllowed === 0
+          ? 'Your lease does not include parking.'
+          : `Parking limit reached for this lease. Maximum ${lease.carsAllowed} car(s) allowed (including pending requests).`,
       );
     }
     const existingPlate = await this.prisma.parkingRegistration.findFirst({
-      where: { leaseId: lease.id, licensePlate, deletedAt: null },
+      where: { buildingId: lease.buildingId, licensePlate, deletedAt: null },
     });
     if (existingPlate) {
       throw new BadRequestException(
-        'This license plate is already registered for this unit.',
+        'This license plate is already registered in this building.',
       );
     }
     const pendingSame = await this.prisma.tenantParkingRequest.findFirst({
@@ -877,7 +944,6 @@ export class PortalService {
     if (!request) {
       throw new NotFoundException('Payment request not found');
     }
-    const root = process.cwd();
-    return path.join(root, 'uploads', request.receiptUrl);
+    return request.receiptUrl;
   }
 }

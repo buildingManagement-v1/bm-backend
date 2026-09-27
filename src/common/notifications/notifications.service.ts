@@ -1,3 +1,4 @@
+import { ManagerRole } from 'generated/prisma/enums';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateNotificationDto, QueryNotificationsDto } from './dto';
@@ -66,6 +67,44 @@ export class NotificationsService {
         };
     }
     return null;
+  }
+
+  /**
+   * Notifies a building's owner and its current managers holding any of the
+   * given roles.
+   */
+  async notifyBuildingStaff(
+    buildingId: string,
+    roles: ManagerRole[],
+    notification: Omit<CreateNotificationDto, 'userId' | 'userType'>,
+  ) {
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { userId: true },
+    });
+    if (building?.userId) {
+      await this.create({
+        ...notification,
+        userId: building.userId,
+        userType: 'user',
+      });
+    }
+    const managerRoles = await this.prisma.managerBuildingRole.findMany({
+      where: {
+        buildingId,
+        deletedAt: null,
+        roles: { hasSome: roles },
+        manager: { deletedAt: null, status: 'active' },
+      },
+      select: { managerId: true },
+    });
+    for (const { managerId } of managerRoles) {
+      await this.create({
+        ...notification,
+        userId: managerId,
+        userType: 'manager',
+      });
+    }
   }
 
   async create(dto: CreateNotificationDto) {

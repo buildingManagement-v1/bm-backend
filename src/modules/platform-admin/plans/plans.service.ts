@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
+import { isFreePlan } from 'src/common/plan-limits/free-plan.util';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePlanDto, UpdatePlanDto } from './dto';
 import { ActivityLogsService } from 'src/modules/user/activity-logs/activity-logs.service';
@@ -26,9 +28,10 @@ export class PlansService {
 
     const plan = await this.prisma.subscriptionPlan.create({
       data: {
-        name: dto.name,
+        name: dto.name.trim(),
         price: dto.price,
-        features: dto.features,
+        features: { premiumFeatures: [], ...dto.features } as object,
+        type: dto.type,
       },
     });
 
@@ -98,9 +101,31 @@ export class PlansService {
       }
     }
 
+    // Registration depends on the Free trial plan staying as it is
+    if (isFreePlan(plan)) {
+      const changesFree =
+        (dto.name !== undefined && dto.name.trim().toLowerCase() !== 'free') ||
+        (dto.price !== undefined && dto.price !== 0) ||
+        dto.status === 'inactive' ||
+        dto.type === 'custom';
+      if (changesFree) {
+        throw new BadRequestException(
+          'The Free plan is the new-owner trial: only its limits can be changed',
+        );
+      }
+    }
+
+    // Lowering limits doesn't touch owners already over them: they keep
+    // what they have but can't add more until they're back under the limit
     const updated = await this.prisma.subscriptionPlan.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.features && {
+          features: { premiumFeatures: [], ...dto.features } as object,
+        }),
+      },
     });
 
     await this.activityLogsService.createPlatformLog({
@@ -129,6 +154,22 @@ export class PlansService {
 
     if (!plan) {
       throw new NotFoundException('Plan not found');
+    }
+
+    if (isFreePlan(plan)) {
+      throw new BadRequestException(
+        'The Free plan is the new-owner trial and cannot be deleted',
+      );
+    }
+
+    const [subscriptions, requests] = await Promise.all([
+      this.prisma.subscription.count({ where: { planId: id } }),
+      this.prisma.subscriptionRequest.count({ where: { planId: id } }),
+    ]);
+    if (subscriptions + requests > 0) {
+      throw new ConflictException(
+        'This plan has subscription history. Deactivate it instead of deleting.',
+      );
     }
 
     await this.prisma.subscriptionPlan.delete({

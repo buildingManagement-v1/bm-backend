@@ -593,7 +593,9 @@ async function main() {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() - 15);
     const existingInv = await prisma.invoice.findUnique({
-      where: { invoiceNumber: invNum },
+      where: {
+        buildingId_invoiceNumber: { buildingId: b.id, invoiceNumber: invNum },
+      },
     });
     if (!existingInv) {
       await prisma.invoice.create({

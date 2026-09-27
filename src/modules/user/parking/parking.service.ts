@@ -45,6 +45,19 @@ export class ParkingService {
     return plate.trim().replace(/\s+/g, ' ').toUpperCase();
   }
 
+  /** A vehicle can only be registered once per building. */
+  private async assertPlateFree(buildingId: string, licensePlate: string) {
+    const existing = await this.prisma.parkingRegistration.findFirst({
+      where: whereActive({ buildingId, licensePlate }),
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'This license plate is already registered in this building.',
+      );
+    }
+  }
+
   async create(buildingId: string, dto: CreateParkingRegistrationDto) {
     const lease = await this.prisma.lease.findFirst({
       where: whereActive({
@@ -74,15 +87,7 @@ export class ParkingService {
       );
     }
 
-    const existingPlate = await this.prisma.parkingRegistration.findFirst({
-      where: whereActive({ leaseId: lease.id, licensePlate }),
-    });
-
-    if (existingPlate) {
-      throw new ConflictException(
-        'This license plate is already registered for this unit.',
-      );
-    }
+    await this.assertPlateFree(buildingId, licensePlate);
 
     const registration = await this.prisma.parkingRegistration.create({
       data: {
@@ -161,7 +166,14 @@ export class ParkingService {
     const request = await this.prisma.tenantParkingRequest.findFirst({
       where: { id: requestId, buildingId, tenant: { deletedAt: null } },
       include: {
-        lease: { select: { id: true, carsAllowed: true } },
+        lease: {
+          select: {
+            id: true,
+            carsAllowed: true,
+            status: true,
+            deletedAt: true,
+          },
+        },
         unit: { select: { unitNumber: true } },
       },
     });
@@ -173,6 +185,11 @@ export class ParkingService {
         'This parking request has already been processed',
       );
     }
+    if (request.lease.status !== 'active' || request.lease.deletedAt) {
+      throw new BadRequestException(
+        'The lease for this request is no longer active',
+      );
+    }
     const licensePlate = this.normalizeLicensePlate(request.licensePlate);
     const existingCount = await this.prisma.parkingRegistration.count({
       where: whereActive({ leaseId: request.leaseId }),
@@ -182,14 +199,7 @@ export class ParkingService {
         `Parking limit reached for this lease. Maximum ${request.lease.carsAllowed} car(s) allowed.`,
       );
     }
-    const existingPlate = await this.prisma.parkingRegistration.findFirst({
-      where: whereActive({ leaseId: request.leaseId, licensePlate }),
-    });
-    if (existingPlate) {
-      throw new ConflictException(
-        'This license plate is already registered for this unit.',
-      );
-    }
+    await this.assertPlateFree(buildingId, licensePlate);
     const registration = await this.prisma.parkingRegistration.create({
       data: {
         buildingId: request.buildingId,

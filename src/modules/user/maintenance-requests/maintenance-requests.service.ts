@@ -1,3 +1,4 @@
+import { MaintenanceRequestStatus } from 'generated/prisma/enums';
 import {
   Injectable,
   NotFoundException,
@@ -17,6 +18,17 @@ import { buildPageInfo } from 'src/common/pagination';
 import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
 import { whereActive } from 'src/common/soft-delete/soft-delete.scope';
 
+/** Which statuses a request may move to from each status. */
+const STATUS_TRANSITIONS: Record<
+  MaintenanceRequestStatus,
+  MaintenanceRequestStatus[]
+> = {
+  pending: ['in_progress', 'completed', 'cancelled'],
+  in_progress: ['pending', 'completed', 'cancelled'],
+  completed: ['in_progress'],
+  cancelled: ['pending'],
+};
+
 @Injectable()
 export class MaintenanceRequestsService {
   constructor(
@@ -33,49 +45,40 @@ export class MaintenanceRequestsService {
     userRole: string,
     dto: CreateMaintenanceRequestDto,
   ) {
-    let tenantId: string;
+    // Owners/managers may log a request for a tenant, a unit, or a common
+    // area (neither)
+    let tenantId: string | undefined;
     let unitId: string | undefined;
 
-    // Managers and Owners must select a tenant
-    if (userRole === 'owner' || userRole === 'manager') {
-      if (!dto.tenantId) {
-        throw new BadRequestException('Please select a tenant');
-      }
-
+    if (dto.tenantId) {
       const tenant = await this.prisma.tenant.findFirst({
         where: whereActive({ id: dto.tenantId, buildingId }),
       });
-
       if (!tenant) {
         throw new NotFoundException('Tenant not found in this building');
       }
+      tenantId = tenant.id;
+    }
 
+    if (dto.unitId) {
+      const unit = await this.prisma.unit.findFirst({
+        where: whereActive({ id: dto.unitId, buildingId }),
+        select: { id: true },
+      });
+      if (!unit) {
+        throw new NotFoundException('Unit not found in this building');
+      }
+      unitId = unit.id;
+    } else if (tenantId) {
       const activeLease = await this.prisma.lease.findFirst({
         where: whereActive({
-          tenantId: dto.tenantId,
+          tenantId,
+          buildingId,
           status: 'active' as const,
         }),
         select: { unitId: true },
       });
-
-      tenantId = dto.tenantId;
-      unitId = activeLease?.unitId || undefined;
-    } else {
-      const tenant = await this.prisma.tenant.findFirst({
-        where: whereActive({ id: userId, buildingId }),
-      });
-
-      if (!tenant) {
-        throw new NotFoundException('Tenant not found');
-      }
-
-      const activeLease = await this.prisma.lease.findFirst({
-        where: whereActive({ tenantId: userId, status: 'active' as const }),
-        select: { unitId: true },
-      });
-
-      tenantId = userId;
-      unitId = activeLease?.unitId || undefined;
+      unitId = activeLease?.unitId;
     }
 
     const request = await this.prisma.maintenanceRequest.create({
@@ -288,7 +291,13 @@ export class MaintenanceRequestsService {
     const userName = await this.getUserName(userId, userRole);
     const dataToUpdate: Prisma.MaintenanceRequestUpdateInput = {};
 
-    if (dto.status) {
+    if (dto.status && dto.status !== request.status) {
+      const allowed = STATUS_TRANSITIONS[request.status];
+      if (!allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          `A ${request.status.replace('_', ' ')} request can't be moved to ${dto.status.replace('_', ' ')}`,
+        );
+      }
       dataToUpdate.status = dto.status;
       if (dto.status === 'completed') {
         dataToUpdate.completedAt = new Date();
@@ -347,10 +356,7 @@ export class MaintenanceRequestsService {
       });
     }
 
-    if (
-      dto.status &&
-      (dto.status === 'in_progress' || dto.status === 'completed')
-    ) {
+    if (updated.tenant && dto.status && dto.status !== request.status) {
       await this.emailService.sendMaintenanceStatusUpdateEmail(
         updated.tenant.email,
         updated.tenant.name,
@@ -359,7 +365,7 @@ export class MaintenanceRequestsService {
       );
 
       await this.notificationsService.create({
-        userId: updated.tenantId,
+        userId: updated.tenant.id,
         userType: 'tenant',
         type: 'maintenance_request_updated',
         title: 'Maintenance Request Updated',
@@ -407,21 +413,23 @@ export class MaintenanceRequestsService {
       } as Prisma.InputJsonValue,
     });
 
-    await this.emailService.sendMaintenanceStatusUpdateEmail(
-      request.tenant.email,
-      request.tenant.name,
-      request.title,
-      'cancelled',
-    );
+    if (request.tenant) {
+      await this.emailService.sendMaintenanceStatusUpdateEmail(
+        request.tenant.email,
+        request.tenant.name,
+        request.title,
+        'cancelled',
+      );
 
-    await this.notificationsService.create({
-      userId: request.tenantId,
-      userType: 'tenant',
-      type: 'maintenance_request_updated',
-      title: 'Maintenance Request Cancelled',
-      message: `Your maintenance request "${request.title}" has been cancelled`,
-      link: `/tenant/maintenance`,
-    });
+      await this.notificationsService.create({
+        userId: request.tenant.id,
+        userType: 'tenant',
+        type: 'maintenance_request_updated',
+        title: 'Maintenance Request Cancelled',
+        message: `Your maintenance request "${request.title}" has been cancelled`,
+        link: `/tenant/maintenance`,
+      });
+    }
 
     return { success: true };
   }

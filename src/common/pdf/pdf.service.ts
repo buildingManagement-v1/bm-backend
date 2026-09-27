@@ -62,7 +62,9 @@ export class PdfService {
       .text('Invoice Date', 400, 85, { align: 'right' })
       .fontSize(10)
       .fillColor('#111827')
-      .text(data.date.toLocaleDateString(), 400, 100, { align: 'right' });
+      .text(data.date.toLocaleDateString('en-GB'), 400, 100, {
+        align: 'right',
+      });
 
     if (data.dueDate) {
       doc
@@ -71,7 +73,9 @@ export class PdfService {
         .text('Due Date', 400, 120, { align: 'right' })
         .fontSize(10)
         .fillColor('#111827')
-        .text(data.dueDate.toLocaleDateString(), 400, 135, { align: 'right' });
+        .text(data.dueDate.toLocaleDateString('en-GB'), 400, 135, {
+          align: 'right',
+        });
     }
 
     // From section
@@ -144,7 +148,9 @@ export class PdfService {
       doc
         .fontSize(10)
         .text(item.description, 50, yPosition, { width: 400 })
-        .text(`$${item.amount.toFixed(2)}`, 480, yPosition, { align: 'right' });
+        .text(`ETB ${item.amount.toFixed(2)}`, 480, yPosition, {
+          align: 'right',
+        });
       yPosition += 25;
     });
 
@@ -168,7 +174,7 @@ export class PdfService {
     doc
       .fontSize(20)
       .fillColor('#111827')
-      .text(`$${data.total.toFixed(2)}`, 480, yPosition - 3, {
+      .text(`ETB ${data.total.toFixed(2)}`, 480, yPosition - 3, {
         align: 'right',
       });
 
@@ -222,7 +228,9 @@ export class PdfService {
       .text('Invoice Date', 400, 85, { align: 'right' })
       .fontSize(10)
       .fillColor('#111827')
-      .text(data.date.toLocaleDateString(), 400, 100, { align: 'right' });
+      .text(data.date.toLocaleDateString('en-GB'), 400, 100, {
+        align: 'right',
+      });
 
     // Bill To section
     doc
@@ -261,7 +269,7 @@ export class PdfService {
       .fontSize(10)
       .fillColor('#111827')
       .text(
-        `${data.billingPeriod.start.toLocaleDateString()} - ${data.billingPeriod.end.toLocaleDateString()}`,
+        `${data.billingPeriod.start.toLocaleDateString('en-GB')} - ${data.billingPeriod.end.toLocaleDateString('en-GB')}`,
         50,
         235,
       );
@@ -285,7 +293,7 @@ export class PdfService {
       .fillColor('#111827')
       .font('Helvetica')
       .text(`${data.planName} - Annual Subscription`, 50, yPosition)
-      .text(`$${data.totalAmount.toFixed(2)}`, 480, yPosition, {
+      .text(`ETB ${data.totalAmount.toFixed(2)}`, 480, yPosition, {
         align: 'right',
       });
 
@@ -299,7 +307,7 @@ export class PdfService {
         .text('Prorated Adjustment', 50, yPosition)
         .fillColor(data.proratedAmount >= 0 ? '#111827' : '#10B981')
         .text(
-          `${data.proratedAmount >= 0 ? '' : '-'}$${Math.abs(data.proratedAmount).toFixed(2)}`,
+          `${data.proratedAmount >= 0 ? '' : '-'}ETB ${Math.abs(data.proratedAmount).toFixed(2)}`,
           480,
           yPosition,
           { align: 'right' },
@@ -331,7 +339,7 @@ export class PdfService {
     doc
       .fontSize(20)
       .fillColor('#111827')
-      .text(`$${finalAmount.toFixed(2)}`, 480, yPosition - 3, {
+      .text(`ETB ${finalAmount.toFixed(2)}`, 480, yPosition - 3, {
         align: 'right',
       });
 

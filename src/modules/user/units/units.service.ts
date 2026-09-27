@@ -164,6 +164,24 @@ export class UnitsService {
       throw new NotFoundException('Unit not found in this building');
     }
 
+    if (dto.status !== undefined && dto.status !== unit.status) {
+      const activeLease = await this.prisma.lease.findFirst({
+        where: whereActive({ unitId: id, status: 'active' as const }),
+        select: { id: true },
+      });
+      if (activeLease) {
+        throw new BadRequestException(
+          'This unit has an active lease; its status follows the lease. Terminate the lease first.',
+        );
+      }
+    }
+
+    // Inactive units don't count toward the plan's unit limit, so bringing
+    // one back must fit within it
+    if (unit.status === 'inactive' && dto.status === 'vacant') {
+      await this.planLimitsService.canCreateUnit(buildingId);
+    }
+
     if (dto.unitNumber && dto.unitNumber !== unit.unitNumber) {
       const existingUnit = await this.prisma.unit.findFirst({
         where: whereActive({ buildingId, unitNumber: dto.unitNumber }),

@@ -1,7 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
-  moduleFormat    = "cjs"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -22,19 +22,19 @@ enum PlatformAdminRole {
 }
 
 model PlatformAdmin {
-  id                           String              @id @default(uuid())
-  name                         String
-  email                        String              @unique
-  passwordHash                 String              @map("password_hash")
-  roles                        PlatformAdminRole[]
-  status                       AdminStatus         @default(active)
-  mustResetPassword            Boolean             @default(true) @map("must_reset_password")
-  passwordResetToken           String?             @map("password_reset_token")
-  passwordResetTokenExpiresAt  DateTime?           @map("password_reset_token_expires_at")
-  passwordChangedAt            DateTime?           @map("password_changed_at")
-  lastLoginAt                  DateTime?           @map("last_login_at")
-  createdAt                    DateTime            @default(now()) @map("created_at")
-  updatedAt                    DateTime            @updatedAt @map("updated_at")
+  id                          String              @id @default(uuid())
+  name                        String
+  email                       String              @unique
+  passwordHash                String              @map("password_hash")
+  roles                       PlatformAdminRole[]
+  status                      AdminStatus         @default(active)
+  mustResetPassword           Boolean             @default(true) @map("must_reset_password")
+  passwordResetToken          String?             @map("password_reset_token")
+  passwordResetTokenExpiresAt DateTime?           @map("password_reset_token_expires_at")
+  passwordChangedAt           DateTime?           @map("password_changed_at")
+  lastLoginAt                 DateTime?           @map("last_login_at")
+  createdAt                   DateTime            @default(now()) @map("created_at")
+  updatedAt                   DateTime            @updatedAt @map("updated_at")
 
   @@map("platform_admins")
 }
@@ -60,11 +60,12 @@ model Otp {
   userId    String   @map("user_id")
   expiresAt DateTime @map("expires_at")
   isUsed    Boolean  @default(false) @map("is_used")
+  attempts  Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("otps")
   @@index([userId, type])
   @@index([otp, type])
+  @@map("otps")
 }
 
 enum UserStatus {
@@ -73,19 +74,19 @@ enum UserStatus {
 }
 
 model User {
-  id                           String      @id @default(uuid())
-  name                         String
-  email                        String      @unique
-  passwordHash                 String      @map("password_hash")
-  phone                        String?
-  status                       UserStatus  @default(active)
-  mustResetPassword            Boolean     @default(false) @map("must_reset_password")
-  passwordChangedAt            DateTime?   @map("password_changed_at")
-  lastLoginAt                  DateTime?   @map("last_login_at")
-  deletedAt                    DateTime?   @map("deleted_at")
-  deletedById                  String?     @map("deleted_by_id")
-  createdAt                    DateTime    @default(now()) @map("created_at")
-  updatedAt                    DateTime    @updatedAt @map("updated_at")
+  id                String     @id @default(uuid())
+  name              String
+  email             String     @unique
+  passwordHash      String     @map("password_hash")
+  phone             String?
+  status            UserStatus @default(active)
+  mustResetPassword Boolean    @default(false) @map("must_reset_password")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+  lastLoginAt       DateTime?  @map("last_login_at")
+  deletedAt         DateTime?  @map("deleted_at")
+  deletedById       String?    @map("deleted_by_id")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
 
   @@index([deletedAt])
   @@map("users")
@@ -114,22 +115,22 @@ enum ManagerRole {
 }
 
 model Manager {
-  id                           String         @id @default(uuid())
-  userId                       String         @map("user_id")
-  name                         String
-  email                        String
-  passwordHash                 String         @map("password_hash")
-  phone                        String?
-  status                       UserStatus     @default(active)
-  mustResetPassword            Boolean        @default(true) @map("must_reset_password")
-  passwordChangedAt            DateTime?      @map("password_changed_at")
-  lastLoginAt                  DateTime?      @map("last_login_at")
-  deletedAt                    DateTime?      @map("deleted_at")
-  deletedById                  String?        @map("deleted_by_id")
-  createdAt                    DateTime       @default(now()) @map("created_at")
-  updatedAt                    DateTime       @updatedAt @map("updated_at")
+  id                String     @id @default(uuid())
+  userId            String     @map("user_id")
+  name              String
+  email             String
+  passwordHash      String     @map("password_hash")
+  phone             String?
+  status            UserStatus @default(active)
+  mustResetPassword Boolean    @default(true) @map("must_reset_password")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+  lastLoginAt       DateTime?  @map("last_login_at")
+  deletedAt         DateTime?  @map("deleted_at")
+  deletedById       String?    @map("deleted_by_id")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
 
-  buildingRoles                ManagerBuildingRole[]
+  buildingRoles ManagerBuildingRole[]
 
   @@index([email])
   @@map("managers")
@@ -146,72 +147,75 @@ enum PlanType {
 }
 
 model SubscriptionPlan {
-  id            String      @id @default(uuid())
-  name          String      @unique
-  price         Decimal     @map("price")
-  features      Json        // { maxBuildings: 1, maxUnits: 30, maxManagers: 5, premiumFeatures: ["hr_module"] }
-  status        PlanStatus  @default(active)
-  type          PlanType    @default(public)
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  id        String     @id @default(uuid())
+  name      String     @unique
+  price     Decimal    @map("price")
+  features  Json // { maxBuildings: 1, maxUnits: 30, maxManagers: 5, premiumFeatures: ["hr_module"] }
+  status    PlanStatus @default(active)
+  type      PlanType   @default(public)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
 
-  subscriptions       Subscription[]
-  historyAsOldPlan    SubscriptionHistory[] @relation("OldPlan")
-  historyAsNewPlan    SubscriptionHistory[] @relation("NewPlan")
+  subscriptions        Subscription[]
+  subscriptionRequests SubscriptionRequest[]
+  historyAsOldPlan     SubscriptionHistory[] @relation("OldPlan")
+  historyAsNewPlan     SubscriptionHistory[] @relation("NewPlan")
 
   @@map("subscription_plans")
 }
 
 model Building {
-  id               String      @id @default(uuid())
-  userId           String      @map("user_id")
-  name             String
-  address          String?
-  city             String?
-  country          String?
-  contactEmail     String?     @map("contact_email")
-  contactPhone     String?     @map("contact_phone")
-  logoUrl          String?     @map("logo_url")
-  settings         Json?
-  vatRate              Decimal?    @map("vat_rate")
-  withholdingRate      Decimal?    @map("withholding_rate")
-  paymentCollectionDay Int?        @map("payment_collection_day")
-  totalParkingLots     Int         @default(0) @map("total_parking_lots")
-  status               UserStatus  @default(active)
-  deletedAt        DateTime?   @map("deleted_at")
-  deletedById      String?      @map("deleted_by_id")
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
-  
-  tenants                Tenant[]
-  leases                 Lease[]
-  maintenanceRequests    MaintenanceRequest[]
-  payments               Payment[]
-  invoices               Invoice[]
-  announcements          Announcement[]
-  utilityReadings        UtilityReading[]
-  parkingRegistrations     ParkingRegistration[]
-  tenantPaymentRequests   TenantPaymentRequest[]
-  tenantParkingRequests   TenantParkingRequest[]
+  id                   String     @id @default(uuid())
+  userId               String     @map("user_id")
+  name                 String
+  address              String?
+  city                 String?
+  country              String?
+  contactEmail         String?    @map("contact_email")
+  contactPhone         String?    @map("contact_phone")
+  logoUrl              String?    @map("logo_url")
+  settings             Json?
+  vatRate              Decimal?   @map("vat_rate")
+  withholdingRate      Decimal?   @map("withholding_rate")
+  paymentCollectionDay Int?       @map("payment_collection_day")
+  totalParkingLots     Int        @default(0) @map("total_parking_lots")
+  /// Days after a period's start (the collection day) before unpaid rent is overdue
+  paymentGraceDays     Int        @default(5) @map("payment_grace_days")
+  status               UserStatus @default(active)
+  deletedAt            DateTime?  @map("deleted_at")
+  deletedById          String?    @map("deleted_by_id")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
 
-  managerRoles     ManagerBuildingRole[]
-  units            Unit[]
+  tenants               Tenant[]
+  leases                Lease[]
+  maintenanceRequests   MaintenanceRequest[]
+  payments              Payment[]
+  invoices              Invoice[]
+  announcements         Announcement[]
+  utilityReadings       UtilityReading[]
+  parkingRegistrations  ParkingRegistration[]
+  tenantPaymentRequests TenantPaymentRequest[]
+  tenantParkingRequests TenantParkingRequest[]
+
+  managerRoles ManagerBuildingRole[]
+  units        Unit[]
 
   @@map("buildings")
 }
 
 model ManagerBuildingRole {
-  id          String         @id @default(uuid())
-  managerId   String         @map("manager_id")
-  buildingId  String         @map("building_id")
+  id          String        @id @default(uuid())
+  managerId   String        @map("manager_id")
+  buildingId  String        @map("building_id")
   roles       ManagerRole[]
   deletedAt   DateTime?     @map("deleted_at")
-  deletedById String?        @map("deleted_by_id")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  deletedById String?       @map("deleted_by_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  manager     Manager        @relation(fields: [managerId], references: [id], onDelete: Cascade)
-  building    Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  manager  Manager  @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@index([managerId, buildingId])
   @@index([managerId])
@@ -235,28 +239,28 @@ enum UnitStatus {
 }
 
 model Unit {
-  id          String      @id @default(uuid())
-  buildingId  String      @map("building_id")
-  unitNumber  String      @map("unit_number")
+  id          String     @id @default(uuid())
+  buildingId  String     @map("building_id")
+  unitNumber  String     @map("unit_number")
   floor       Int?
   size        Decimal?
   type        UnitType?
-  rentPrice   Decimal     @map("rent_price")
-  status      UnitStatus  @default(vacant)
-  deletedAt   DateTime?   @map("deleted_at")
-  deletedById String?     @map("deleted_by_id")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  rentPrice   Decimal    @map("rent_price")
+  status      UnitStatus @default(vacant)
+  deletedAt   DateTime?  @map("deleted_at")
+  deletedById String?    @map("deleted_by_id")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
 
-  leases                 Lease[]
-  maintenanceRequests    MaintenanceRequest[]
-  payments               Payment[]
-  invoices               Invoice[]
-  parkingRegistrations    ParkingRegistration[]
-  tenantPaymentRequests   TenantPaymentRequest[]
-  tenantParkingRequests   TenantParkingRequest[]
+  leases                Lease[]
+  maintenanceRequests   MaintenanceRequest[]
+  payments              Payment[]
+  invoices              Invoice[]
+  parkingRegistrations  ParkingRegistration[]
+  tenantPaymentRequests TenantPaymentRequest[]
+  tenantParkingRequests TenantParkingRequest[]
 
-  building    Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@index([buildingId, unitNumber])
   @@index([buildingId])
@@ -270,30 +274,30 @@ enum TenantStatus {
 }
 
 model Tenant {
-  id                           String        @id @default(uuid())
-  buildingId                   String        @map("building_id")
-  name                         String
-  email                        String
-  phone                        String?
-  tin                          String?       @map("tin")
-  passwordHash                 String?       @map("password_hash")
-  status                       TenantStatus  @default(inactive)
-  mustResetPassword            Boolean       @default(false) @map("must_reset_password")
-  passwordChangedAt            DateTime?     @map("password_changed_at")
-  lastLoginAt                  DateTime?     @map("last_login_at")
-  deletedAt                    DateTime?     @map("deleted_at")
-  deletedById                  String?       @map("deleted_by_id")
-  createdAt                    DateTime      @default(now()) @map("created_at")
-  updatedAt                    DateTime      @updatedAt @map("updated_at")
+  id                String       @id @default(uuid())
+  buildingId        String       @map("building_id")
+  name              String
+  email             String
+  phone             String?
+  tin               String?      @map("tin")
+  passwordHash      String?      @map("password_hash")
+  status            TenantStatus @default(inactive)
+  mustResetPassword Boolean      @default(false) @map("must_reset_password")
+  passwordChangedAt DateTime?    @map("password_changed_at")
+  lastLoginAt       DateTime?    @map("last_login_at")
+  deletedAt         DateTime?    @map("deleted_at")
+  deletedById       String?      @map("deleted_by_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
-  building               Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  leases                 Lease[]
-  invoices               Invoice[]
-  maintenanceRequests    MaintenanceRequest[]
-  payments               Payment[]
-  parkingRegistrations    ParkingRegistration[]
-  tenantPaymentRequests  TenantPaymentRequest[]
-  tenantParkingRequests  TenantParkingRequest[]
+  building              Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  leases                Lease[]
+  invoices              Invoice[]
+  maintenanceRequests   MaintenanceRequest[]
+  payments              Payment[]
+  parkingRegistrations  ParkingRegistration[]
+  tenantPaymentRequests TenantPaymentRequest[]
+  tenantParkingRequests TenantParkingRequest[]
 
   @@index([buildingId, email])
   @@index([buildingId])
@@ -307,29 +311,32 @@ enum LeaseStatus {
 }
 
 model Lease {
-  id              String        @id @default(uuid())
-  tenantId        String        @map("tenant_id")
-  unitId          String        @map("unit_id")
-  buildingId      String        @map("building_id")
-  startDate       DateTime      @map("start_date")
-  endDate         DateTime      @map("end_date")
-  rentAmount      Decimal       @map("rent_amount")
-  securityDeposit Decimal?      @map("security_deposit")
-  carsAllowed          Int           @default(0) @map("cars_allowed")
-  applyVat             Boolean       @default(false) @map("apply_vat")
-  applyWithholding     Boolean       @default(false) @map("apply_withholding")
-  useDefaultPaymentDay Boolean       @default(true) @map("use_default_payment_day")
-  paymentCollectionDay Int?          @map("payment_collection_day")
-  status               LeaseStatus   @default(active)
-  terms            Json?
-  deletedAt        DateTime?     @map("deleted_at")
-  deletedById     String?       @map("deleted_by_id")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id                   String      @id @default(uuid())
+  tenantId             String      @map("tenant_id")
+  unitId               String      @map("unit_id")
+  buildingId           String      @map("building_id")
+  startDate            DateTime    @map("start_date")
+  endDate              DateTime    @map("end_date")
+  rentAmount           Decimal     @map("rent_amount")
+  securityDeposit      Decimal?    @map("security_deposit")
+  carsAllowed          Int         @default(0) @map("cars_allowed")
+  applyVat             Boolean     @default(false) @map("apply_vat")
+  applyWithholding     Boolean     @default(false) @map("apply_withholding")
+  useDefaultPaymentDay Boolean     @default(true) @map("use_default_payment_day")
+  paymentCollectionDay Int?        @map("payment_collection_day")
+  status               LeaseStatus @default(active)
+  terminatedAt         DateTime?   @map("terminated_at")
+  terminationReason    String?     @map("termination_reason")
+  expiryNoticeSentAt   DateTime?   @map("expiry_notice_sent_at")
+  terms                Json?
+  deletedAt            DateTime?   @map("deleted_at")
+  deletedById          String?     @map("deleted_by_id")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
 
-  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit                 Unit                 @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  building             Building             @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit                  Unit                   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building              Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   paymentPeriods        PaymentPeriod[]
   parkingRegistrations  ParkingRegistration[]
   tenantPaymentRequests TenantPaymentRequest[]
@@ -343,21 +350,21 @@ model Lease {
 }
 
 model ParkingRegistration {
-  id          String   @id @default(uuid())
-  buildingId  String   @map("building_id")
-  leaseId     String   @map("lease_id")
-  tenantId    String   @map("tenant_id")
-  unitId      String   @map("unit_id")
-  licensePlate String  @map("license_plate")
-  deletedAt   DateTime? @map("deleted_at")
-  deletedById String?  @map("deleted_by_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  buildingId   String    @map("building_id")
+  leaseId      String    @map("lease_id")
+  tenantId     String    @map("tenant_id")
+  unitId       String    @map("unit_id")
+  licensePlate String    @map("license_plate")
+  deletedAt    DateTime? @map("deleted_at")
+  deletedById  String?   @map("deleted_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  building  Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   @@index([leaseId, licensePlate])
   @@index([buildingId])
@@ -374,23 +381,23 @@ enum ParkingRequestStatus {
 }
 
 model TenantParkingRequest {
-  id               String               @id @default(uuid())
-  buildingId       String               @map("building_id")
-  tenantId         String               @map("tenant_id")
-  leaseId          String               @map("lease_id")
-  unitId           String               @map("unit_id")
-  licensePlate     String               @map("license_plate")
-  status           ParkingRequestStatus  @default(pending)
-  reviewedAt       DateTime?            @map("reviewed_at")
-  reviewedById     String?              @map("reviewed_by_id")
-  rejectionReason  String?               @map("rejection_reason")
-  createdAt        DateTime             @default(now()) @map("created_at")
-  updatedAt        DateTime             @updatedAt @map("updated_at")
+  id              String               @id @default(uuid())
+  buildingId      String               @map("building_id")
+  tenantId        String               @map("tenant_id")
+  leaseId         String               @map("lease_id")
+  unitId          String               @map("unit_id")
+  licensePlate    String               @map("license_plate")
+  status          ParkingRequestStatus @default(pending)
+  reviewedAt      DateTime?            @map("reviewed_at")
+  reviewedById    String?              @map("reviewed_by_id")
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
 
-  building  Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   @@index([buildingId])
   @@index([tenantId])
@@ -423,10 +430,10 @@ model TenantPaymentRequest {
   createdAt       DateTime             @default(now()) @map("created_at")
   updatedAt       DateTime             @updatedAt @map("updated_at")
 
-  building  Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  unit      Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lease    Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   @@index([buildingId])
   @@index([tenantId])
@@ -449,25 +456,25 @@ enum MaintenanceRequestPriority {
 }
 
 model MaintenanceRequest {
-  id              String                      @id @default(uuid())
-  buildingId      String                      @map("building_id")
-  unitId          String?                     @map("unit_id")
-  tenantId        String                      @map("tenant_id")
-  title           String
-  description     String
-  priority        MaintenanceRequestPriority  @default(medium)
-  status          MaintenanceRequestStatus    @default(pending)
-  attachments     Json?
-  notes           Json?  
-  completedAt     DateTime?                   @map("completed_at")
-  deletedAt       DateTime?                   @map("deleted_at")
-  deletedById     String?                      @map("deleted_by_id")
-  createdAt       DateTime                    @default(now()) @map("created_at")
-  updatedAt       DateTime                    @updatedAt @map("updated_at")
+  id          String                     @id @default(uuid())
+  buildingId  String                     @map("building_id")
+  unitId      String?                    @map("unit_id")
+  tenantId    String?                    @map("tenant_id")
+  title       String
+  description String
+  priority    MaintenanceRequestPriority @default(medium)
+  status      MaintenanceRequestStatus   @default(pending)
+  attachments Json?
+  notes       Json?
+  completedAt DateTime?                  @map("completed_at")
+  deletedAt   DateTime?                  @map("deleted_at")
+  deletedById String?                    @map("deleted_by_id")
+  createdAt   DateTime                   @default(now()) @map("created_at")
+  updatedAt   DateTime                   @updatedAt @map("updated_at")
 
-  building        Building                    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  unit            Unit?                       @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  tenant          Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant   Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([buildingId])
   @@index([unitId])
@@ -491,11 +498,11 @@ enum PaymentType {
 }
 
 model Payment {
-  id              String        @id @default(uuid())
-  buildingId      String        @map("building_id")
-  unitId          String?       @map("unit_id")
-  tenantId        String        @map("tenant_id")
-  invoiceId       String?       @map("invoice_id")
+  id                String        @id @default(uuid())
+  buildingId        String        @map("building_id")
+  unitId            String?       @map("unit_id")
+  tenantId          String        @map("tenant_id")
+  invoiceId         String?       @map("invoice_id")
   amount            Decimal
   baseAmount        Decimal?      @map("base_amount")
   vatAmount         Decimal?      @map("vat_amount")
@@ -507,11 +514,11 @@ model Payment {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  unit            Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  paymentPeriods  PaymentPeriod[]
+  building       Building        @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit           Unit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentPeriods PaymentPeriod[]
 
   @@index([buildingId])
   @@index([unitId])
@@ -530,24 +537,25 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id              String        @id @default(uuid())
-  buildingId      String        @map("building_id")
-  unitId          String?       @map("unit_id")
-  tenantId        String        @map("tenant_id")
-  invoiceNumber   String        @unique @map("invoice_number")
-  amount          Decimal
-  dueDate         DateTime      @map("due_date")
-  status          InvoiceStatus @default(draft)
-  items           Json
-  notes           String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  buildingId    String        @map("building_id")
+  unitId        String?       @map("unit_id")
+  tenantId      String        @map("tenant_id")
+  invoiceNumber String        @map("invoice_number")
+  amount        Decimal
+  dueDate       DateTime      @map("due_date")
+  status        InvoiceStatus @default(draft)
+  items         Json
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  unit            Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  payments        Payment[]
+  building Building  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
+  @@unique([buildingId, invoiceNumber])
   @@index([buildingId])
   @@index([unitId])
   @@index([tenantId])
@@ -555,19 +563,31 @@ model Invoice {
   @@map("invoices")
 }
 
-model Announcement {
-  id              String        @id @default(uuid())
-  buildingId      String        @map("building_id")
-  title           String
-  content         String
-  priority        String?
-  publishedAt     DateTime?     @map("published_at")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+enum AnnouncementPriority {
+  normal
+  important
+  urgent
+}
 
-  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+model Announcement {
+  id            String               @id @default(uuid())
+  buildingId    String               @map("building_id")
+  title         String
+  content       String
+  priority      AnnouncementPriority @default(normal)
+  publishedAt   DateTime?            @map("published_at")
+  expiresAt     DateTime?            @map("expires_at")
+  createdById   String?              @map("created_by_id")
+  createdByName String?              @map("created_by_name")
+  deletedAt     DateTime?            @map("deleted_at")
+  deletedById   String?              @map("deleted_by_id")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@index([buildingId])
+  @@index([publishedAt])
   @@map("announcements")
 }
 
@@ -577,16 +597,16 @@ enum UtilityType {
 }
 
 model UtilityReading {
-  id              String        @id @default(uuid())
-  buildingId      String        @map("building_id")
-  type            UtilityType
-  reading         Decimal
-  readingDate     DateTime      @map("reading_date")
-  notes           String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id          String      @id @default(uuid())
+  buildingId  String      @map("building_id")
+  type        UtilityType
+  reading     Decimal
+  readingDate DateTime    @map("reading_date")
+  notes       String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  building        Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@index([buildingId])
   @@index([type])
@@ -600,21 +620,22 @@ enum PaymentPeriodStatus {
 }
 
 model PaymentPeriod {
-  id           String   @id @default(uuid())
-  leaseId      String
-  month        String   // YYYY-MM for legacy; YYYY-MM-DD (periodStart date) for cycle-based
-  rentAmount   Decimal  @db.Decimal(10, 2)
-  periodStart  DateTime? @map("period_start")
-  periodEnd    DateTime? @map("period_end")
-  daysInCycle  Int?      @map("days_in_cycle")
-  status       PaymentPeriodStatus @default(unpaid)
-  paidAt       DateTime?
-  paymentId    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String              @id @default(uuid())
+  leaseId        String
+  month          String // YYYY-MM for legacy; YYYY-MM-DD (periodStart date) for cycle-based
+  rentAmount     Decimal             @db.Decimal(10, 2)
+  periodStart    DateTime?           @map("period_start")
+  periodEnd      DateTime?           @map("period_end")
+  daysInCycle    Int?                @map("days_in_cycle")
+  status         PaymentPeriodStatus @default(unpaid)
+  paidAt         DateTime?
+  paymentId      String?
+  reminderSentAt DateTime?           @map("reminder_sent_at")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  lease        Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  payment      Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  lease   Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([leaseId, month])
   @@map("payment_periods")
@@ -641,19 +662,27 @@ enum ActivityEntityType {
   payment_request
   notification
   app_version_config
+  building
+  announcement
+  subscription
+  subscription_request
+  login_advert
+  platform_admin
+  platform_setting
+  broadcast
 }
 
 model ActivityLog {
-  id          String              @id @default(uuid())
-  action      ActivityAction
-  entityType  ActivityEntityType  @map("entity_type")
-  entityId    String              @map("entity_id")
-  userId      String              @map("user_id")
-  userName    String              @map("user_name")
-  userRole    String              @map("user_role")
-  buildingId  String              @map("building_id")
-  details     Json?
-  createdAt   DateTime            @default(now()) @map("created_at")
+  id         String             @id @default(uuid())
+  action     ActivityAction
+  entityType ActivityEntityType @map("entity_type")
+  entityId   String             @map("entity_id")
+  userId     String             @map("user_id")
+  userName   String             @map("user_name")
+  userRole   String             @map("user_role")
+  buildingId String             @map("building_id")
+  details    Json?
+  createdAt  DateTime           @default(now()) @map("created_at")
 
   @@index([buildingId])
   @@index([entityType])
@@ -662,14 +691,14 @@ model ActivityLog {
 }
 
 model PlatformActivityLog {
-  id          String              @id @default(uuid())
-  action      ActivityAction
-  entityType  ActivityEntityType  @map("entity_type")
-  entityId    String              @map("entity_id")
-  adminId     String              @map("admin_id")
-  adminName   String              @map("admin_name")
-  details     Json?
-  createdAt   DateTime            @default(now()) @map("created_at")
+  id         String             @id @default(uuid())
+  action     ActivityAction
+  entityType ActivityEntityType @map("entity_type")
+  entityId   String             @map("entity_id")
+  adminId    String             @map("admin_id")
+  adminName  String             @map("admin_name")
+  details    Json?
+  createdAt  DateTime           @default(now()) @map("created_at")
 
   @@index([createdAt])
   @@map("platform_activity_logs")
@@ -690,19 +719,20 @@ enum SubscriptionAction {
 }
 
 model Subscription {
-  id                  String              @id @default(uuid())
-  userId              String              @map("user_id")
-  planId              String              @map("plan_id")
-  totalAmount         Decimal             @map("total_amount")
-  billingCycleStart   DateTime            @map("billing_cycle_start")
-  billingCycleEnd     DateTime            @map("billing_cycle_end")
-  nextBillingDate     DateTime            @map("next_billing_date")
-  status              SubscriptionStatus  @default(active)
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid())
+  userId               String             @map("user_id")
+  planId               String             @map("plan_id")
+  totalAmount          Decimal            @map("total_amount")
+  billingCycleStart    DateTime           @map("billing_cycle_start")
+  billingCycleEnd      DateTime           @map("billing_cycle_end")
+  nextBillingDate      DateTime           @map("next_billing_date")
+  status               SubscriptionStatus @default(active)
+  expiryReminderSentAt DateTime?          @map("expiry_reminder_sent_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  plan                SubscriptionPlan    @relation(fields: [planId], references: [id], onDelete: Restrict)
-  history             SubscriptionHistory[]
+  plan    SubscriptionPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  history SubscriptionHistory[]
 
   @@index([userId])
   @@index([planId])
@@ -711,23 +741,55 @@ model Subscription {
 }
 
 model SubscriptionHistory {
-  id                  String              @id @default(uuid())
-  userId              String              @map("user_id")
-  subscriptionId      String              @map("subscription_id")
-  action              SubscriptionAction
-  oldPlanId           String?             @map("old_plan_id")
-  newPlanId           String              @map("new_plan_id")
-  proratedAmount      Decimal?            @map("prorated_amount")
-  notes               String?
-  createdAt           DateTime            @default(now()) @map("created_at")
+  id             String             @id @default(uuid())
+  userId         String             @map("user_id")
+  subscriptionId String             @map("subscription_id")
+  action         SubscriptionAction
+  oldPlanId      String?            @map("old_plan_id")
+  newPlanId      String             @map("new_plan_id")
+  proratedAmount Decimal?           @map("prorated_amount")
+  notes          String?
+  createdAt      DateTime           @default(now()) @map("created_at")
 
-  subscription        Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  oldPlan             SubscriptionPlan?   @relation("OldPlan", fields: [oldPlanId], references: [id], onDelete: SetNull)
-  newPlan             SubscriptionPlan    @relation("NewPlan", fields: [newPlanId], references: [id], onDelete: Restrict)
+  subscription Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  oldPlan      SubscriptionPlan? @relation("OldPlan", fields: [oldPlanId], references: [id], onDelete: SetNull)
+  newPlan      SubscriptionPlan  @relation("NewPlan", fields: [newPlanId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([subscriptionId])
   @@map("subscription_history")
+}
+
+enum SubscriptionRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+/// Owner-initiated plan purchase/renewal/change, paid by bank transfer and
+/// activated only when a billing admin approves the uploaded receipt.
+model SubscriptionRequest {
+  id               String                    @id @default(uuid())
+  userId           String                    @map("user_id")
+  planId           String                    @map("plan_id")
+  amount           Decimal
+  receiptUrl       String                    @map("receipt_url")
+  paymentReference String?                   @map("payment_reference")
+  notes            String?
+  status           SubscriptionRequestStatus @default(pending)
+  reviewedAt       DateTime?                 @map("reviewed_at")
+  reviewedById     String?                   @map("reviewed_by_id")
+  rejectionReason  String?                   @map("rejection_reason")
+  subscriptionId   String?                   @map("subscription_id")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([status])
+  @@map("subscription_requests")
 }
 
 enum NotificationType {
@@ -750,22 +812,66 @@ enum NotificationType {
   subscription_upgraded
   subscription_expiring
   subscription_expired
+  subscription_request_created
+  subscription_request_updated
+  lease_terminated
+  rent_due
+  rent_overdue
+  announcement
+  platform_broadcast
 }
 
 model AppVersionConfig {
-  id                      String    @id @default(uuid())
-  androidMinimumVersion   String    @map("android_minimum_version")
-  androidLatestVersion    String    @map("android_latest_version")
-  iosMinimumVersion       String    @map("ios_minimum_version")
-  iosLatestVersion        String    @map("ios_latest_version")
-  versionDescription      String    @map("version_description") @db.Text
-  lastForceUpdateVersion  String    @map("last_force_update_version")
-  isOptional              Boolean   @default(true) @map("is_optional")
-  updatedById             String?   @map("updated_by_id")
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  id                     String   @id @default(uuid())
+  androidMinimumVersion  String   @map("android_minimum_version")
+  androidLatestVersion   String   @map("android_latest_version")
+  iosMinimumVersion      String   @map("ios_minimum_version")
+  iosLatestVersion       String   @map("ios_latest_version")
+  versionDescription     String   @map("version_description") @db.Text
+  lastForceUpdateVersion String   @map("last_force_update_version")
+  isOptional             Boolean  @default(true) @map("is_optional")
+  updatedById            String?  @map("updated_by_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   @@map("app_version_configs")
+}
+
+/// Admin-editable platform configuration (key/value)
+model PlatformSetting {
+  key         String   @id
+  value       String   @db.Text
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+enum AdvertAudience {
+  all
+  owner
+  manager
+  tenant
+}
+
+/// Promotional banners shown on the web/mobile login screens.
+model LoginAdvert {
+  id          String         @id @default(uuid())
+  title       String
+  description String?
+  imageUrl    String         @map("image_url")
+  linkUrl     String?        @map("link_url")
+  audience    AdvertAudience @default(all)
+  isActive    Boolean        @default(true) @map("is_active")
+  startsAt    DateTime?      @map("starts_at")
+  endsAt      DateTime?      @map("ends_at")
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdById String?        @map("created_by_id")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("login_adverts")
 }
 
 model Notification {
@@ -792,13 +898,13 @@ enum PushPlatform {
 }
 
 model DeviceToken {
-  id        String         @id @default(uuid())
-  userId    String         @map("user_id")
-  userType  UserType       @map("user_type")
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  userType  UserType     @map("user_type")
   token     String
   platform  PushPlatform
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
 
   @@unique([userId, userType, token])
   @@index([userId, userType])

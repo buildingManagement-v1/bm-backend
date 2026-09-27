@@ -1,10 +1,23 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Behind nginx in production: trust one proxy hop so req.ip is the real
+  // client (needed for rate limiting). Override with TRUST_PROXY if needed.
+  const trustProxy =
+    process.env.TRUST_PROXY ??
+    (process.env.NODE_ENV === 'production' ? '1' : '');
+  if (trustProxy) {
+    app.set(
+      'trust proxy',
+      /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy,
+    );
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

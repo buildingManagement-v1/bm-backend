@@ -52,8 +52,13 @@ export class ManagerRolesGuard implements CanActivate {
       throw new ForbiddenException('Building context not set');
     }
 
-    // Building owners have all permissions
-    if (user.role === 'owner' || user.type === 'app') {
+    if (user.type !== 'app') {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    // Building owners have all permissions (ownership is checked by
+    // BuildingAccessGuard)
+    if (user.role === 'owner') {
       return true;
     }
 

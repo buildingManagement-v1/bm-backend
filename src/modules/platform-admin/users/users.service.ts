@@ -7,7 +7,14 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SoftDeleteService } from '../../../common/soft-delete/soft-delete.service';
 import { UserDeletionService } from '../../../common/user-deletion/user-deletion.service';
 import { EmailService } from '../../../common/email/email.service';
-import type { Prisma } from 'generated/prisma/client';
+import { OtpType, Prisma, UserType } from 'generated/prisma/client';
+import { TokenService } from 'src/common/token/token.service';
+import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { BillingService } from 'src/modules/billing/billing.service';
+import { ActivityLogsService } from 'src/modules/user/activity-logs/activity-logs.service';
+import { parsePlanFeatures } from 'src/common/types/plan-features.interface';
+import { CreateOwnerDto } from './dto';
 
 @Injectable()
 export class UsersService {
@@ -16,6 +23,9 @@ export class UsersService {
     private softDeleteService: SoftDeleteService,
     private userDeletionService: UserDeletionService,
     private emailService: EmailService,
+    private billingService: BillingService,
+    private activityLogsService: ActivityLogsService,
+    private tokenService: TokenService,
   ) {}
 
   async findAllOwners(query: {
@@ -147,7 +157,11 @@ export class UsersService {
     return { id: user.id, email: user.email };
   }
 
-  async updateOwnerStatus(id: string, status: 'active' | 'inactive') {
+  async updateOwnerStatus(
+    id: string,
+    status: 'active' | 'inactive',
+    admin: { id: string; name: string },
+  ) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
@@ -158,7 +172,205 @@ export class UsersService {
       data: { status },
       select: { id: true, name: true, email: true, status: true },
     });
+    await this.logStatus('user', id, status, admin);
     return updated;
+  }
+
+  /**
+   * Creates an owner account on their behalf: a temporary password is
+   * emailed and must be changed at first login; the owner gets the one-time
+   * Free trial like a self-registered owner.
+   */
+  async createOwner(dto: CreateOwnerDto, admin: { id: string; name: string }) {
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException(
+        existing.deletedAt
+          ? 'This email belongs to an account pending deletion. Restore it instead.'
+          : 'An owner with this email already exists',
+      );
+    }
+
+    const temporaryPassword = randomBytes(9).toString('base64url');
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name.trim(),
+        email,
+        phone: dto.phone?.trim() || null,
+        passwordHash: await bcrypt.hash(temporaryPassword, 10),
+        mustResetPassword: true,
+      },
+      select: { id: true, name: true, email: true, phone: true, status: true },
+    });
+    await this.billingService.startTrial(user.id);
+
+    await this.emailService.sendOwnerAccountCreatedEmail(
+      user.email,
+      user.name,
+      temporaryPassword,
+    );
+    await this.activityLogsService.createPlatformLog({
+      action: 'create',
+      entityType: 'user',
+      entityId: user.id,
+      adminId: admin.id,
+      adminName: admin.name,
+      details: { email: user.email } as Prisma.InputJsonValue,
+    });
+    return user;
+  }
+
+  /** Emails the owner a reset code, as if they had used "Forgot password". */
+  async sendOwnerPasswordReset(
+    id: string,
+    admin: { id: string; name: string },
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, email: true, status: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.status === 'inactive') {
+      throw new ConflictException(
+        'Activate the account before sending a reset',
+      );
+    }
+    const otp = await this.tokenService.createOTP(
+      user.id,
+      UserType.user,
+      OtpType.password_reset,
+      10,
+    );
+    await this.emailService.sendUserPasswordResetEmail(user.email, otp);
+    await this.activityLogsService.createPlatformLog({
+      action: 'update',
+      entityType: 'user',
+      entityId: user.id,
+      adminId: admin.id,
+      adminName: admin.name,
+      details: {
+        email: user.email,
+        passwordResetSent: true,
+      } as Prisma.InputJsonValue,
+    });
+    return { message: `Password reset code sent to ${user.email}` };
+  }
+
+  /** Everything support needs about one owner. */
+  async getOwnerDetail(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        mustResetPassword: true,
+        lastLoginAt: true,
+        deletedAt: true,
+        createdAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const [subscriptions, requests, buildings, managers] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where: { userId: id },
+        include: {
+          plan: {
+            select: { id: true, name: true, price: true, features: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.subscriptionRequest.findMany({
+        where: { userId: id },
+        include: { plan: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.building.findMany({
+        where: { userId: id, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          createdAt: true,
+          units: {
+            where: { deletedAt: null },
+            select: { status: true },
+          },
+          _count: {
+            select: {
+              tenants: { where: { deletedAt: null, status: 'active' } },
+              leases: { where: { deletedAt: null, status: 'active' } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.manager.count({
+        where: { userId: id, deletedAt: null, status: 'active' },
+      }),
+    ]);
+
+    const now = new Date();
+    const active =
+      subscriptions.find(
+        (s) => s.status === 'active' && s.billingCycleEnd >= now,
+      ) ?? null;
+    const limits = active ? parsePlanFeatures(active.plan.features) : null;
+
+    return {
+      ...user,
+      subscription: active,
+      subscriptionHistory: subscriptions,
+      requests,
+      usage: {
+        buildings: buildings.length,
+        managers,
+        maxUnitsInABuilding: Math.max(
+          0,
+          ...buildings.map(
+            (b) => b.units.filter((u) => u.status !== 'inactive').length,
+          ),
+        ),
+        limits,
+      },
+      buildings: buildings.map((b) => {
+        const total = b.units.filter((u) => u.status !== 'inactive').length;
+        const occupied = b.units.filter((u) => u.status === 'occupied').length;
+        return {
+          id: b.id,
+          name: b.name,
+          city: b.city,
+          createdAt: b.createdAt,
+          units: total,
+          occupiedUnits: occupied,
+          occupancyRate: total ? Math.round((occupied / total) * 1000) / 10 : 0,
+          activeTenants: b._count.tenants,
+          activeLeases: b._count.leases,
+        };
+      }),
+    };
+  }
+
+  private async logStatus(
+    entityType: 'user' | 'manager' | 'tenant',
+    entityId: string,
+    status: string,
+    admin: { id: string; name: string },
+  ) {
+    await this.activityLogsService.createPlatformLog({
+      action: 'status_change',
+      entityType,
+      entityId,
+      adminId: admin.id,
+      adminName: admin.name,
+      details: { status } as Prisma.InputJsonValue,
+    });
   }
 
   async findAllManagers(query: {
@@ -225,7 +437,11 @@ export class UsersService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async updateManagerStatus(id: string, status: 'active' | 'inactive') {
+  async updateManagerStatus(
+    id: string,
+    status: 'active' | 'inactive',
+    admin: { id: string; name: string },
+  ) {
     const manager = await this.prisma.manager.findFirst({
       where: { id, deletedAt: null },
     });
@@ -236,6 +452,7 @@ export class UsersService {
       data: { status },
       select: { id: true, name: true, email: true, status: true },
     });
+    await this.logStatus('manager', id, status, admin);
     return updated;
   }
 
@@ -292,7 +509,11 @@ export class UsersService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async updateTenantStatus(id: string, status: 'active' | 'inactive') {
+  async updateTenantStatus(
+    id: string,
+    status: 'active' | 'inactive',
+    admin: { id: string; name: string },
+  ) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id, deletedAt: null },
     });
@@ -303,6 +524,7 @@ export class UsersService {
       data: { status },
       select: { id: true, name: true, email: true, status: true },
     });
+    await this.logStatus('tenant', id, status, admin);
     return updated;
   }
 }

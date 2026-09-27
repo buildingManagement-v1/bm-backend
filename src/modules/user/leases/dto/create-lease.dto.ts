@@ -4,13 +4,13 @@ import {
   IsDateString,
   IsNumber,
   IsOptional,
-  IsEnum,
   IsBoolean,
   IsInt,
+  IsObject,
+  IsPositive,
   Min,
   Max,
 } from 'class-validator';
-import { LeaseStatus } from 'generated/prisma/enums';
 
 export class CreateLeaseDto {
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
@@ -21,53 +21,58 @@ export class CreateLeaseDto {
   @IsUUID()
   unitId!: string;
 
-  @ApiProperty({ example: '2023-01-01T00:00:00Z' })
+  @ApiProperty({ example: '2026-01-01' })
   @IsDateString()
   startDate!: string;
 
-  @ApiProperty({ example: '2024-01-01T00:00:00Z' })
+  @ApiProperty({
+    example: '2026-12-31',
+    description: 'Must be after startDate',
+  })
   @IsDateString()
   endDate!: string;
 
-  @ApiProperty({ example: 1000 })
-  @IsNumber()
+  @ApiProperty({ example: 15000, description: 'Monthly rent before tax' })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   rentAmount!: number;
 
-  @ApiProperty({ example: 1000, required: false })
+  @ApiProperty({ example: 30000, required: false })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   securityDeposit?: number;
 
   @ApiProperty({ example: 1, required: false })
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   carsAllowed?: number;
 
-  @ApiProperty({ example: true })
+  @ApiProperty({
+    example: true,
+    description: "Collect rent on the building's default payment day",
+  })
   @IsBoolean()
   useDefaultPaymentDay!: boolean;
 
-  @ApiProperty({ example: 1, required: false })
+  @ApiProperty({
+    example: 5,
+    required: false,
+    description: 'Required when useDefaultPaymentDay is false',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(31)
   paymentCollectionDay?: number;
 
   @ApiProperty({ example: false })
   @IsBoolean()
   applyWithholding!: boolean;
 
-  @ApiProperty({
-    enum: LeaseStatus,
-    example: LeaseStatus['active'],
-    required: false,
-  })
-  @IsEnum(LeaseStatus as object)
+  @ApiProperty({ required: false, description: 'Free-form lease terms' })
   @IsOptional()
-  status?: LeaseStatus;
-
-  @ApiProperty({ example: { petPolicy: 'allowed' }, required: false })
-  @IsOptional()
-  terms?: any;
+  @IsObject()
+  terms?: Record<string, unknown>;
 }

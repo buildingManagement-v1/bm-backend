@@ -8,7 +8,6 @@ import {
   Delete,
   Query,
   UseGuards,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -192,29 +191,5 @@ export class TenantsController {
       success: true,
       data: result,
     };
-  }
-
-  @Post('onboard')
-  @UseGuards(ManagerRolesGuard)
-  @RequireManagerRoles(ManagerRole.tenant_manager)
-  @ApiOperation({
-    summary: 'Onboard a tenant (create tenant + assign unit + create lease)',
-  })
-  @ApiResponse({ status: 201, description: 'Tenant onboarded successfully' })
-  onboard() {
-    // const result = await this.tenantsService.onboard(
-    //   buildingId,
-    //   user.id,
-    //   user.role,
-    //   dto,
-    // );
-    // return {
-    //   success: true,
-    //   data: result,
-    //   message: 'Tenant onboarded successfully',
-    // };
-    throw new ServiceUnavailableException(
-      'This feature is currently disabled.',
-    );
   }
 }

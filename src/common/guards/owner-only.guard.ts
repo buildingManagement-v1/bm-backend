@@ -26,8 +26,8 @@ export class OwnerOnlyGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Only allow if user is owner (not manager)
-    if (user.role === 'manager') {
+    // Only building owners (not managers, tenants or platform admins)
+    if (user.type !== 'app' || user.role !== 'owner') {
       throw new ForbiddenException(
         'This operation is restricted to building owners only',
       );

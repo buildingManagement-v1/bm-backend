@@ -6,6 +6,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
+import { AuthRateLimit } from 'src/common/throttle/throttle.constants';
 import {
   ApiTags,
   ApiOperation,
@@ -22,6 +23,7 @@ import {
 } from './dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { User } from '../../../common/decorators/user.decorator';
+import { TenantGuard } from 'src/common/guards/user-type.guards';
 
 interface RequestWithCookies extends Request {
   cookies: {
@@ -34,6 +36,7 @@ interface RequestWithCookies extends Request {
 export class TenantAuthController {
   constructor(private readonly authService: TenantAuthService) {}
 
+  @AuthRateLimit()
   @Post('login')
   @ApiOperation({ summary: 'Tenant login' })
   @ApiResponse({ status: 200, description: 'Login successful' })
@@ -50,6 +53,7 @@ export class TenantAuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('request-otp')
   @ApiOperation({ summary: 'Request password reset OTP' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
@@ -61,6 +65,7 @@ export class TenantAuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
@@ -72,8 +77,9 @@ export class TenantAuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Change password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
@@ -88,6 +94,7 @@ export class TenantAuthController {
     };
   }
 
+  @AuthRateLimit()
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })

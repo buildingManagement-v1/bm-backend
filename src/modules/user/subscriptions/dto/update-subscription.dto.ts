@@ -1,14 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { SubscriptionStatus } from 'generated/prisma/enums';
+import { IsIn } from 'class-validator';
 
+/** Cancel an active subscription, or reactivate a cancelled one still in its cycle. */
 export class UpdateSubscriptionDto {
-  @ApiProperty({
-    enum: SubscriptionStatus,
-    example: SubscriptionStatus['active'],
-    required: false,
-  })
-  @IsOptional()
-  @IsEnum(SubscriptionStatus)
-  status?: SubscriptionStatus;
+  @ApiProperty({ enum: ['active', 'cancelled'] })
+  @IsIn(['active', 'cancelled'])
+  status: 'active' | 'cancelled';
 }

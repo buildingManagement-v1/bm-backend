@@ -1,25 +1,53 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsDateString } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
+/**
+ * Admin assigns a plan directly (offline/negotiated payment, custom plans).
+ * An active free trial is replaced; an active paid plan must be changed via
+ * the upgrade endpoint instead.
+ */
 export class CreateSubscriptionDto {
-  @ApiProperty({
-    example: 'user-uuid-here',
-    description: 'User ID to assign subscription to',
-  })
-  @IsString()
+  @ApiProperty({ description: 'Owner (user) id' })
+  @IsUUID()
   userId: string;
 
-  @ApiProperty({
-    example: 'plan-uuid-here',
-    description: 'Plan ID to subscribe to',
-  })
-  @IsString()
+  @ApiProperty({ description: 'Plan to assign (public or custom)' })
+  @IsUUID()
   planId: string;
 
   @ApiProperty({
     example: '2026-01-18',
-    description: 'Billing cycle start date (YYYY-MM-DD)',
+    description: 'Cycle start (YYYY-MM-DD)',
   })
   @IsDateString()
   billingCycleStart: string;
+
+  @ApiProperty({
+    required: false,
+    default: 12,
+    description: 'Cycle length in months',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(36)
+  durationMonths?: number;
+
+  @ApiProperty({
+    required: false,
+    example: 'Paid in cash at office, receipt #123',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
 }

@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { CreateBuildingDto, UpdateBuildingDto } from './dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -140,6 +142,24 @@ export class BuildingsService {
       throw new NotFoundException('Building not found');
     }
 
+    if (
+      dto.totalParkingLots !== undefined &&
+      dto.totalParkingLots < building.totalParkingLots
+    ) {
+      const { _sum } = await this.prisma.lease.aggregate({
+        where: whereActive({ buildingId, status: 'active' as const }),
+        _sum: { carsAllowed: true },
+      });
+      const allocated = Number(_sum.carsAllowed ?? 0);
+      if (dto.totalParkingLots < allocated) {
+        throw new BadRequestException(
+          `Active leases already allow ${allocated} car(s). Lower their parking allowance first.`,
+        );
+      }
+    }
+
+    // Tax, payment day and grace changes apply going forward: new leases use
+    // the new payment day, and tax is computed when each payment is recorded
     const updated = await this.prisma.building.update({
       where: { id: buildingId },
       data: dto,
@@ -155,6 +175,15 @@ export class BuildingsService {
 
     if (!building) {
       throw new NotFoundException('Building not found');
+    }
+
+    const activeLeases = await this.prisma.lease.count({
+      where: whereActive({ buildingId, status: 'active' as const }),
+    });
+    if (activeLeases > 0) {
+      throw new ConflictException(
+        `This building has ${activeLeases} active lease(s). Terminate them before deleting the building.`,
+      );
     }
 
     await this.softDeleteService.softDeleteBuilding(buildingId, userId);

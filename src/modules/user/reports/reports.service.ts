@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { todayDate } from 'src/common/lease/lease-cycles.util';
 
 export interface ReportSummary {
   occupancyRate: number;
@@ -34,11 +35,13 @@ export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
   async getSummary(buildingId: string): Promise<ReportSummary> {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const startOfMonth = new Date(currentYear, currentMonth - 1, 1);
-    const endOfMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+    const today = todayDate();
+    const currentYear = today.getUTCFullYear();
+    const currentMonth = today.getUTCMonth() + 1;
+    const startOfMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
+    const endOfMonth = new Date(
+      Date.UTC(currentYear, currentMonth, 0, 23, 59, 59, 999),
+    );
 
     const [
       totalUnits,
@@ -53,32 +56,40 @@ export class ReportsService {
       openMaintenanceCount,
     ] = await Promise.all([
       this.prisma.unit.count({
-        where: { buildingId, status: { not: 'inactive' } },
+        where: { buildingId, deletedAt: null, status: { not: 'inactive' } },
       }),
-      this.prisma.unit.count({ where: { buildingId, status: 'occupied' } }),
-      this.prisma.unit.count({ where: { buildingId, status: 'vacant' } }),
+      this.prisma.unit.count({
+        where: { buildingId, deletedAt: null, status: 'occupied' },
+      }),
+      this.prisma.unit.count({
+        where: { buildingId, deletedAt: null, status: 'vacant' },
+      }),
+      // Rent billed for cycles starting this month (incl. ended leases)
       this.prisma.paymentPeriod.findMany({
         where: {
-          lease: { buildingId, status: 'active', deletedAt: null },
-          periodStart: { lte: endOfMonth },
-          periodEnd: { gte: startOfMonth },
+          lease: { buildingId, deletedAt: null, tenant: { deletedAt: null } },
+          periodStart: { gte: startOfMonth, lte: endOfMonth },
         },
         select: { leaseId: true, rentAmount: true },
       }),
+      // Rent actually received this month (deposits etc. are not rent)
       this.prisma.payment
         .aggregate({
           where: {
             buildingId,
+            type: 'rent',
             status: 'completed',
             paymentDate: { gte: startOfMonth, lte: endOfMonth },
           },
           _sum: { amount: true },
         })
         .then((r) => Number(r._sum.amount ?? 0)),
+      // Receivables: rent already due (cycle started) and not paid
       this.prisma.paymentPeriod.findMany({
         where: {
-          lease: { buildingId, status: 'active', deletedAt: null },
+          lease: { buildingId, deletedAt: null, tenant: { deletedAt: null } },
           status: { in: ['unpaid', 'overdue'] },
+          periodStart: { lte: today },
         },
         select: { leaseId: true, rentAmount: true },
       }),
@@ -87,7 +98,7 @@ export class ReportsService {
         select: { vatRate: true, withholdingRate: true },
       }),
       this.prisma.lease.findMany({
-        where: { buildingId, status: 'active', deletedAt: null },
+        where: { buildingId, deletedAt: null },
         select: { id: true, applyWithholding: true },
       }),
       this.prisma.lease.count({
@@ -96,8 +107,8 @@ export class ReportsService {
           status: 'active',
           deletedAt: null,
           endDate: {
-            gte: now,
-            lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+            gte: today,
+            lte: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000),
           },
         },
       }),
@@ -196,6 +207,7 @@ export class ReportsService {
         by: ['priority'],
         where: {
           buildingId,
+          deletedAt: null,
           status: { in: ['pending', 'in_progress'] },
         },
         _count: true,
@@ -238,13 +250,17 @@ export class ReportsService {
   ): Promise<{ id: string; name: string }[]> {
     if (userRole === 'manager') {
       const assignments = await this.prisma.managerBuildingRole.findMany({
-        where: { managerId: userId },
+        where: {
+          managerId: userId,
+          deletedAt: null,
+          building: { deletedAt: null },
+        },
         include: { building: { select: { id: true, name: true } } },
       });
       return assignments.map((a) => a.building);
     }
     const list = await this.prisma.building.findMany({
-      where: { userId, status: 'active' },
+      where: { userId, status: 'active', deletedAt: null },
       select: { id: true, name: true },
     });
     return list;
@@ -254,11 +270,13 @@ export class ReportsService {
     const [totalUnits, occupiedUnits, vacantUnits, allUnits] =
       await Promise.all([
         this.prisma.unit.count({
-          where: { buildingId, status: { not: 'inactive' } },
+          where: { buildingId, deletedAt: null, status: { not: 'inactive' } },
         }),
-        this.prisma.unit.count({ where: { buildingId, status: 'occupied' } }),
+        this.prisma.unit.count({
+          where: { buildingId, deletedAt: null, status: 'occupied' },
+        }),
         this.prisma.unit.findMany({
-          where: { buildingId, status: 'vacant' },
+          where: { buildingId, deletedAt: null, status: 'vacant' },
           select: {
             id: true,
             unitNumber: true,
@@ -268,7 +286,7 @@ export class ReportsService {
           },
         }),
         this.prisma.unit.findMany({
-          where: { buildingId, status: { not: 'inactive' } },
+          where: { buildingId, deletedAt: null, status: { not: 'inactive' } },
           select: { id: true },
         }),
       ]);
@@ -290,9 +308,11 @@ export class ReportsService {
       total: number;
     }> = [];
     if (historyMonths > 0 && allUnits.length > 0) {
+      // Every lease that existed (ended ones included) so past months are
+      // measured against what was actually occupied then
       const leases = await this.prisma.lease.findMany({
-        where: { buildingId, status: 'active', deletedAt: null },
-        select: { startDate: true, endDate: true },
+        where: { buildingId, deletedAt: null, unit: { deletedAt: null } },
+        select: { unitId: true, startDate: true, endDate: true },
       });
       const total = allUnits.length;
       const now = new Date();
@@ -309,11 +329,15 @@ export class ReportsService {
           999,
         ).getTime();
         const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-        const occupiedInMonth = leases.filter(
-          (l) =>
-            new Date(l.startDate).getTime() <= monthEnd &&
-            new Date(l.endDate).getTime() >= monthStart,
-        ).length;
+        const occupiedInMonth = new Set(
+          leases
+            .filter(
+              (l) =>
+                new Date(l.startDate).getTime() <= monthEnd &&
+                new Date(l.endDate).getTime() >= monthStart,
+            )
+            .map((l) => l.unitId),
+        ).size;
         const rate =
           total > 0 ? Math.round((occupiedInMonth / total) * 10000) / 100 : 0;
         occupancyByMonth.push({
@@ -361,11 +385,15 @@ export class ReportsService {
     ] = await Promise.all([
       this.prisma.paymentPeriod.findMany({
         where: {
-          lease: { buildingId, status: 'active', deletedAt: null },
-          periodStart: { lte: end },
-          periodEnd: { gte: start },
+          lease: { buildingId, deletedAt: null, tenant: { deletedAt: null } },
+          periodStart: { gte: start, lte: end },
         },
-        select: { leaseId: true, month: true, rentAmount: true },
+        select: {
+          leaseId: true,
+          month: true,
+          rentAmount: true,
+          periodStart: true,
+        },
       }),
       this.prisma.payment.findMany({
         where: {
@@ -373,19 +401,21 @@ export class ReportsService {
           status: 'completed',
           paymentDate: { gte: start, lte: end },
         },
-        select: { amount: true, paymentDate: true },
+        select: { amount: true, paymentDate: true, type: true },
       }),
+      // Receivables: due (cycle started) and unpaid, on any lease
       this.prisma.paymentPeriod.findMany({
         where: {
-          lease: { buildingId, status: 'active', deletedAt: null },
+          lease: { buildingId, deletedAt: null, tenant: { deletedAt: null } },
           status: { in: ['unpaid', 'overdue'] },
+          periodStart: { lte: todayDate() },
         },
         select: {
           leaseId: true,
           month: true,
           rentAmount: true,
           status: true,
-          periodEnd: true,
+          periodStart: true,
         },
       }),
       this.prisma.building.findUnique({
@@ -393,7 +423,7 @@ export class ReportsService {
         select: { vatRate: true, withholdingRate: true },
       }),
       this.prisma.lease.findMany({
-        where: { buildingId, status: 'active', deletedAt: null },
+        where: { buildingId, deletedAt: null },
         select: {
           id: true,
           applyWithholding: true,
@@ -418,10 +448,14 @@ export class ReportsService {
         ),
       0,
     );
-    const collectedRent = paymentsInRange.reduce(
+    const rentPayments = paymentsInRange.filter((p) => p.type === 'rent');
+    const collectedRent = rentPayments.reduce(
       (sum, p) => sum + Number(p.amount),
       0,
     );
+    const otherIncome = paymentsInRange
+      .filter((p) => p.type !== 'rent')
+      .reduce((sum, p) => sum + Number(p.amount), 0);
     const collectionRate =
       expectedRent > 0
         ? Math.round((collectedRent / expectedRent) * 10000) / 100
@@ -430,9 +464,11 @@ export class ReportsService {
     const expectedByMonth = new Map<string, number>();
     for (const m of monthsInRange) expectedByMonth.set(m, 0);
     for (const p of periodsInRange) {
+      // Period keys are cycle start dates (YYYY-MM-DD); bucket by month
+      const monthKey = (p.periodStart?.toISOString() ?? p.month).slice(0, 7);
       expectedByMonth.set(
-        p.month,
-        (expectedByMonth.get(p.month) ?? 0) +
+        monthKey,
+        (expectedByMonth.get(monthKey) ?? 0) +
           taxAdjusted(
             Number(p.rentAmount),
             vatRate,
@@ -443,7 +479,7 @@ export class ReportsService {
     }
     const collectedByMonth = new Map<string, number>();
     for (const m of monthsInRange) collectedByMonth.set(m, 0);
-    for (const p of paymentsInRange) {
+    for (const p of rentPayments) {
       const d = new Date(p.paymentDate);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (collectedByMonth.has(key))
@@ -489,15 +525,13 @@ export class ReportsService {
       const lease = leaseById.get(p.leaseId);
       const tenant = lease?.tenant ?? unknownTenant;
       const unit = lease?.unit ?? unknownUnit;
-      const cycleEnd = p.periodEnd
-        ? new Date(p.periodEnd)
-        : (() => {
-            const [y, mo] = p.month.split('-').map(Number);
-            return new Date(y, mo, 0, 23, 59, 59, 999);
-          })();
+      // Rent is due on the cycle's collection day (its start)
+      const dueDate = p.periodStart
+        ? new Date(p.periodStart)
+        : new Date(`${p.month.slice(0, 7)}-01T00:00:00.000Z`);
       const daysOverdue = Math.max(
         0,
-        Math.ceil((now.getTime() - cycleEnd.getTime()) / (1000 * 60 * 60 * 24)),
+        Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)),
       );
       const amount = taxAdjusted(
         Number(p.rentAmount),
@@ -558,7 +592,8 @@ export class ReportsService {
       expectedRent,
       collectedRent,
       collectionRate,
-      totalRevenue: collectedRent,
+      otherIncome,
+      totalRevenue: collectedRent + otherIncome,
       dateRange: { startDate: start, endDate: end },
       revenueByMonth,
       outstanding: {
@@ -669,7 +704,13 @@ export class ReportsService {
     buildingId: string,
     report: 'outstanding' | 'expirations' | 'vacant',
   ): Promise<string> {
-    const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    // Quote every cell and neutralise spreadsheet formulas (=, +, -, @)
+    const escape = (v: string | number) => {
+      const text = String(v);
+      const safe =
+        /^[=+\-@\t\r]/.test(text) && typeof v === 'string' ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
 
     if (report === 'outstanding') {
       const data = await this.getRevenue(buildingId);
@@ -680,7 +721,7 @@ export class ReportsService {
         ...data.outstanding.periods.map((p) =>
           [
             escape(p.tenant.name),
-            p.unit.unitNumber,
+            escape(p.unit.unitNumber),
             p.month,
             p.amount,
             p.status,
@@ -704,7 +745,7 @@ export class ReportsService {
           [
             escape(p.tenant.name),
             escape(p.tenant.email),
-            p.unit.unitNumber,
+            escape(p.unit.unitNumber),
             new Date(p.endDate).toISOString().slice(0, 10),
             p.daysUntilExpiration,
           ].join(','),
@@ -718,9 +759,12 @@ export class ReportsService {
       const rows = [
         ['Unit', 'Floor', 'Type', 'Rent Price'].join(','),
         ...data.vacantUnitsList.map((u) =>
-          [u.unitNumber, u.floor ?? '', u.type ?? '', Number(u.rentPrice)].join(
-            ',',
-          ),
+          [
+            escape(u.unitNumber),
+            u.floor ?? '',
+            u.type ?? '',
+            Number(u.rentPrice),
+          ].join(','),
         ),
       ];
       return rows.join('\n');

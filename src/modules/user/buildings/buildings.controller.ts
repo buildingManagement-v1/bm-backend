@@ -20,11 +20,12 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { OwnerOnlyGuard } from 'src/common/guards/owner-only.guard';
 import { User } from 'src/common/decorators/user.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
+import { AppUserGuard } from 'src/common/guards/user-type.guards';
 
 @ApiTags('Buildings')
 @ApiBearerAuth()
 @Controller('v1/app/buildings')
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard, AppUserGuard, SubscriptionGuard)
 export class BuildingsController {
   constructor(private readonly buildingsService: BuildingsService) {}
 

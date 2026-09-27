@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
+  IsUUID,
   MinLength,
 } from 'class-validator';
 
@@ -26,4 +27,13 @@ export class TenantLoginDto {
   @IsOptional()
   @IsBoolean()
   rememberMe?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Building to sign in to, when the email is a tenant in more than one building',
+  })
+  @IsOptional()
+  @IsUUID()
+  buildingId?: string;
 }

@@ -30,7 +30,7 @@ import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
 @ApiTags('Units')
 @ApiBearerAuth()
 @Controller('v1/app/units')
-@UseGuards(JwtAuthGuard, BuildingAccessGuard)
+@UseGuards(JwtAuthGuard, BuildingAccessGuard, SubscriptionGuard)
 export class UnitsController {
   constructor(private readonly unitsService: UnitsService) {}
 
@@ -97,7 +97,7 @@ export class UnitsController {
   }
 
   @Patch(':id')
-  @UseGuards(ManagerRolesGuard, SubscriptionGuard)
+  @UseGuards(ManagerRolesGuard)
   @RequireManagerRoles(ManagerRole.tenant_manager)
   @ApiOperation({ summary: 'Update a unit' })
   @ApiResponse({ status: 200, description: 'Unit updated successfully' })

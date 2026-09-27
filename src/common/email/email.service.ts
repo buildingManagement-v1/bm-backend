@@ -1,9 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import { ConfigService } from '@nestjs/config';
 
+export function formatEtb(amount: number): string {
+  return `ETB ${Number(amount).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export function formatDate(date: Date): string {
+  return new Date(date).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Africa/Addis_Ababa',
+  });
+}
+
+type EmailMessage = Parameters<Resend['emails']['send']>[0];
+
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
   private resend: Resend;
   private readonly fromAddress: string;
 
@@ -17,9 +36,29 @@ export class EmailService {
       'BMS <onboarding@resend.dev>';
   }
 
+  /**
+   * Email is best-effort: a delivery failure is logged but never fails the
+   * business operation that triggered it (which has usually committed).
+   */
+  private async send(message: EmailMessage): Promise<void> {
+    try {
+      const { error } = await this.resend.emails.send(message);
+      if (error) {
+        this.logger.warn(
+          `Email to ${String(message.to)} failed: ${error.message}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Email to ${String(message.to)} failed`,
+        error as Error,
+      );
+    }
+  }
+
   // User/Owner Auth
   async sendUserRegistrationEmail(email: string, name: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Welcome to Building Management System',
@@ -36,7 +75,7 @@ export class EmailService {
     name: string,
     purgeDate: Date,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Your account is scheduled for deletion',
@@ -45,14 +84,14 @@ export class EmailService {
         <p>Hi ${name},</p>
         <p>Your Building Management System account has been scheduled for deletion.</p>
         <p>All your buildings, tenants, leases and related data are no longer accessible.</p>
-        <p><strong>Your account and all its data will be permanently deleted on ${purgeDate.toLocaleDateString()}.</strong></p>
+        <p><strong>Your account and all its data will be permanently deleted on ${formatDate(purgeDate)}.</strong></p>
         <p>If this was a mistake or you change your mind, contact support before that date to restore your account.</p>
       `,
     });
   }
 
   async sendAccountRestoredEmail(email: string, name: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Your account has been restored',
@@ -66,7 +105,7 @@ export class EmailService {
   }
 
   async sendUserPasswordResetEmail(email: string, resetToken: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Password Reset Request',
@@ -86,7 +125,7 @@ export class EmailService {
     temporaryPassword: string,
   ) {
     console.log('Temporary password', temporaryPassword);
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'You have Been Invited as a Building Manager',
@@ -153,7 +192,7 @@ export class EmailService {
   }
 
   async sendManagerPasswordResetEmail(email: string, resetToken: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Manager Password Reset',
@@ -175,7 +214,7 @@ export class EmailService {
     console.log('Temporary password', temporaryPassword);
 
     const loginUrl = `${this.configService.get('FRONTEND_URL')}/login?type=tenant`;
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Welcome to Your Tenant Portal',
@@ -216,7 +255,7 @@ export class EmailService {
   }
 
   async sendTenantPasswordResetEmail(email: string, otp: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Tenant Password Reset',
@@ -236,7 +275,7 @@ export class EmailService {
     amount: number,
     invoiceLink?: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Subscription Activated',
@@ -244,7 +283,7 @@ export class EmailService {
         <h1>Subscription Activated</h1>
         <p>Hi ${name},</p>
         <p>Your ${planName} subscription has been activated.</p>
-        <p>Amount: $${amount.toFixed(2)}</p>
+        <p>Amount: ${formatEtb(amount)}</p>
         ${invoiceLink ? `<p><a href="${invoiceLink}">Download Invoice</a></p>` : ''}
       `,
     });
@@ -258,7 +297,7 @@ export class EmailService {
     amount: number,
     invoiceLink?: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Subscription Updated',
@@ -266,7 +305,7 @@ export class EmailService {
         <h1>Subscription Updated</h1>
         <p>Hi ${name},</p>
         <p>Your subscription has been changed from ${oldPlan} to ${newPlan}.</p>
-        <p>New amount: $${amount.toFixed(2)}</p>
+        <p>New amount: ${formatEtb(amount)}</p>
         ${invoiceLink ? `<p><a href="${invoiceLink}">Download Invoice</a></p>` : ''}
       `,
     });
@@ -278,14 +317,14 @@ export class EmailService {
     planName: string,
     expiryDate: Date,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Subscription Expiring Soon',
       html: `
         <h1>Subscription Expiring Soon</h1>
         <p>Hi ${name},</p>
-        <p>Your ${planName} subscription will expire on ${expiryDate.toLocaleDateString()}.</p>
+        <p>Your ${planName} subscription will expire on ${formatDate(expiryDate)}.</p>
         <p>Please renew to continue using the service.</p>
       `,
     });
@@ -296,7 +335,7 @@ export class EmailService {
     name: string,
     planName: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Subscription Expired',
@@ -318,7 +357,7 @@ export class EmailService {
     endDate: Date,
     rentAmount: number,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'New Lease Agreement',
@@ -326,9 +365,9 @@ export class EmailService {
         <h1>Lease Agreement</h1>
         <p>Hi ${tenantName},</p>
         <p>Your lease for Unit ${unitNumber} has been created.</p>
-        <p>Start Date: ${startDate.toLocaleDateString()}</p>
-        <p>End Date: ${endDate.toLocaleDateString()}</p>
-        <p>Monthly Rent: $${rentAmount.toFixed(2)}</p>
+        <p>Start Date: ${formatDate(startDate)}</p>
+        <p>End Date: ${formatDate(endDate)}</p>
+        <p>Monthly Rent: ${formatEtb(rentAmount)}</p>
       `,
     });
   }
@@ -339,14 +378,14 @@ export class EmailService {
     unitNumber: string,
     expiryDate: Date,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Lease Expiring Soon',
       html: `
         <h1>Lease Expiring Soon</h1>
         <p>Hi ${tenantName},</p>
-        <p>Your lease for Unit ${unitNumber} will expire on ${expiryDate.toLocaleDateString()}.</p>
+        <p>Your lease for Unit ${unitNumber} will expire on ${formatDate(expiryDate)}.</p>
         <p>Please contact management for renewal.</p>
       `,
     });
@@ -357,7 +396,7 @@ export class EmailService {
     tenantName: string,
     unitNumber: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Lease Expired',
@@ -377,7 +416,7 @@ export class EmailService {
     paymentDate: Date,
     invoiceNumber: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Payment Receipt',
@@ -385,8 +424,8 @@ export class EmailService {
         <h1>Payment Receipt</h1>
         <p>Hi ${tenantName},</p>
         <p>Your payment has been received.</p>
-        <p>Amount: $${amount.toFixed(2)}</p>
-        <p>Date: ${paymentDate.toLocaleDateString()}</p>
+        <p>Amount: ${formatEtb(amount)}</p>
+        <p>Date: ${formatDate(paymentDate)}</p>
         <p>Invoice: ${invoiceNumber}</p>
       `,
     });
@@ -399,7 +438,7 @@ export class EmailService {
     amount: number,
     dueDate: Date,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'New Invoice',
@@ -408,53 +447,49 @@ export class EmailService {
         <p>Hi ${tenantName},</p>
         <p>A new invoice has been created.</p>
         <p>Invoice Number: ${invoiceNumber}</p>
-        <p>Amount: $${amount.toFixed(2)}</p>
-        <p>Due Date: ${dueDate.toLocaleDateString()}</p>
+        <p>Amount: ${formatEtb(amount)}</p>
+        <p>Due Date: ${formatDate(dueDate)}</p>
       `,
     });
   }
 
-  async sendPaymentOverdueEmail(
+  async sendRentOverdueEmail(
     email: string,
     tenantName: string,
-    invoiceNumber: string,
+    unitNumber: string,
     amount: number,
-    dueDate: Date,
+    periodLabels: string[],
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
-      subject: 'Payment Overdue',
+      subject: 'Rent Overdue',
       html: `
-        <h1>Payment Overdue</h1>
+        <h1>Rent Overdue</h1>
         <p>Hi ${tenantName},</p>
-        <p>Your payment is overdue.</p>
-        <p>Invoice: ${invoiceNumber}</p>
-        <p>Amount: $${amount.toFixed(2)}</p>
-        <p>Due Date: ${dueDate.toLocaleDateString()}</p>
-        <p>Please make payment as soon as possible.</p>
+        <p>Rent for Unit ${unitNumber} is overdue for: ${periodLabels.join(', ')}.</p>
+        <p>Amount due: ${formatEtb(amount)}</p>
+        <p>Please pay as soon as possible, or upload your payment receipt in the tenant portal.</p>
       `,
     });
   }
 
-  async sendPaymentReminderEmail(
+  async sendRentDueReminderEmail(
     email: string,
     tenantName: string,
-    invoiceNumber: string,
+    unitNumber: string,
     amount: number,
     dueDate: Date,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
-      subject: 'Payment Reminder',
+      subject: 'Rent Due Soon',
       html: `
-        <h1>Payment Reminder</h1>
+        <h1>Rent Due Soon</h1>
         <p>Hi ${tenantName},</p>
-        <p>This is a reminder about your upcoming payment.</p>
-        <p>Invoice: ${invoiceNumber}</p>
-        <p>Amount: $${amount.toFixed(2)}</p>
-        <p>Due Date: ${dueDate.toLocaleDateString()}</p>
+        <p>Your rent for Unit ${unitNumber} is due on ${formatDate(dueDate)}.</p>
+        <p>Amount: ${formatEtb(amount)}</p>
       `,
     });
   }
@@ -468,7 +503,7 @@ export class EmailService {
     title: string,
     priority: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: ownerEmail,
       subject: 'New Maintenance Request',
@@ -490,7 +525,7 @@ export class EmailService {
     title: string,
     status: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: tenantEmail,
       subject: 'Maintenance Request Update',
@@ -510,7 +545,7 @@ export class EmailService {
     name: string,
     temporaryPassword: string,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Platform Admin Account Created',
@@ -524,7 +559,7 @@ export class EmailService {
   }
 
   async sendPlatformAdminPasswordResetEmail(email: string, otp: string) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: 'Platform Admin Password Reset',
@@ -544,7 +579,7 @@ export class EmailService {
     invoiceNumber: string,
     pdfBuffer: Buffer,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: `Subscription Invoice - ${invoiceNumber}`,
@@ -553,7 +588,7 @@ export class EmailService {
           <h1 style="color: #8B5CF6;">Subscription Invoice</h1>
           <p>Hi ${name},</p>
           <p>Thank you for subscribing to the <strong>${planName}</strong> plan.</p>
-          <p style="font-size: 18px; color: #111827;">Amount: <strong>$${amount.toFixed(2)}</strong></p>
+          <p style="font-size: 18px; color: #111827;">Amount: <strong>${formatEtb(amount)}</strong></p>
           <p>Your invoice is attached to this email.</p>
           <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
             <p style="margin: 0; color: #6B7280; font-size: 14px;">
@@ -579,7 +614,7 @@ export class EmailService {
     invoiceNumber: string,
     pdfBuffer: Buffer,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: `Payment Receipt - ${invoiceNumber}`,
@@ -590,8 +625,8 @@ export class EmailService {
           <p>Thank you for your payment.</p>
           <div style="margin: 20px 0; padding: 20px; background-color: #EFF6FF; border-left: 4px solid #3B82F6; border-radius: 4px;">
             <p style="margin: 5px 0;"><strong>Invoice:</strong> ${invoiceNumber}</p>
-            <p style="margin: 5px 0;"><strong>Amount:</strong> $${amount.toFixed(2)}</p>
-            <p style="margin: 5px 0;"><strong>Date:</strong> ${paymentDate.toLocaleDateString()}</p>
+            <p style="margin: 5px 0;"><strong>Amount:</strong> ${formatEtb(amount)}</p>
+            <p style="margin: 5px 0;"><strong>Date:</strong> ${formatDate(paymentDate)}</p>
           </div>
           <p>Your receipt is attached to this email.</p>
           <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
@@ -619,7 +654,7 @@ export class EmailService {
     invoiceNumber: string,
     pdfBuffer: Buffer,
   ) {
-    await this.resend.emails.send({
+    await this.send({
       from: this.fromAddress,
       to: email,
       subject: `Subscription Upgrade Invoice - ${invoiceNumber}`,
@@ -631,7 +666,7 @@ export class EmailService {
           <div style="margin: 20px 0; padding: 20px; background-color: #F5F3FF; border-left: 4px solid #8B5CF6; border-radius: 4px;">
             <p style="margin: 5px 0;"><strong>Previous Plan:</strong> ${oldPlan}</p>
             <p style="margin: 5px 0;"><strong>New Plan:</strong> ${newPlan}</p>
-            <p style="margin: 5px 0;"><strong>Prorated Amount:</strong> $${amount.toFixed(2)}</p>
+            <p style="margin: 5px 0;"><strong>Prorated Amount:</strong> ${formatEtb(amount)}</p>
           </div>
           <p>Your upgrade invoice is attached to this email.</p>
           <div style="margin-top: 30px; padding: 20px; background-color: #F3F4F6; border-radius: 8px;">
@@ -647,6 +682,117 @@ export class EmailService {
           content: pdfBuffer,
         },
       ],
+    });
+  }
+
+  async sendLeaseTerminatedEmail(
+    email: string,
+    tenantName: string,
+    unitNumber: string,
+    effectiveDate: Date,
+    outstandingAmount: number,
+  ) {
+    await this.send({
+      from: this.fromAddress,
+      to: email,
+      subject: 'Lease Terminated',
+      html: `
+        <h1>Lease Terminated</h1>
+        <p>Hi ${tenantName},</p>
+        <p>Your lease for Unit ${unitNumber} was terminated effective ${formatDate(effectiveDate)}.</p>
+        ${
+          outstandingAmount > 0
+            ? `<p>Outstanding rent still owed: ${formatEtb(outstandingAmount)}</p>`
+            : '<p>You have no outstanding rent on this lease.</p>'
+        }
+      `,
+    });
+  }
+
+  async sendSubscriptionRequestReceivedEmail(
+    email: string,
+    name: string,
+    planName: string,
+    amount: number,
+  ) {
+    await this.send({
+      from: this.fromAddress,
+      to: email,
+      subject: 'Plan request received',
+      html: `
+        <h1>We received your plan request</h1>
+        <p>Hi ${name},</p>
+        <p>Your request for the ${planName} plan (${formatEtb(amount)}) is being reviewed.
+        We will activate it once your payment is verified.</p>
+      `,
+    });
+  }
+
+  async sendSubscriptionRequestReviewedEmail(
+    email: string,
+    name: string,
+    planName: string,
+    approved: boolean,
+    reason?: string | null,
+  ) {
+    await this.send({
+      from: this.fromAddress,
+      to: email,
+      subject: approved ? 'Your plan is active' : 'Plan request rejected',
+      html: approved
+        ? `
+        <h1>Your ${planName} plan is active</h1>
+        <p>Hi ${name},</p>
+        <p>Your payment was verified and your ${planName} plan is now active.</p>
+      `
+        : `
+        <h1>Plan request rejected</h1>
+        <p>Hi ${name},</p>
+        <p>Your request for the ${planName} plan was rejected.${reason ? ` Reason: ${reason}` : ''}</p>
+        <p>You can submit a new request from the Subscription page.</p>
+      `,
+    });
+  }
+
+  async sendOwnerAccountCreatedEmail(
+    email: string,
+    name: string,
+    temporaryPassword: string,
+  ) {
+    const loginUrl =
+      this.configService.get<string>('FRONTEND_URL') ??
+      'http://localhost:3000/login';
+    await this.send({
+      from: this.fromAddress,
+      to: email,
+      subject: 'Your Building Management account',
+      html: `
+        <h1>Welcome ${name}!</h1>
+        <p>An account was created for you on Building Management System.</p>
+        <p>Email: ${email}<br/>Temporary password: <strong>${temporaryPassword}</strong></p>
+        <p>You will be asked to choose a new password when you first sign in at
+        <a href="${loginUrl}">${loginUrl}</a>.</p>
+        <p>Your account includes a free trial.</p>
+      `,
+    });
+  }
+
+  async sendPlanRequestToAdminsEmail(
+    emails: string[],
+    ownerName: string,
+    planName: string,
+    amount: number,
+  ) {
+    if (emails.length === 0) return;
+    await this.send({
+      from: this.fromAddress,
+      to: emails,
+      subject: `New plan request: ${ownerName} → ${planName}`,
+      html: `
+        <h1>New plan request</h1>
+        <p>${ownerName} requested the ${planName} plan and uploaded a bank receipt for ${formatEtb(amount)}.</p>
+        <p>Check the payment and approve or reject it under Plan Requests in the admin panel.</p>
+      `,
     });
   }
 }

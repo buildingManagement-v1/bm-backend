@@ -17,6 +17,8 @@ import {
   computeRentBaseAmount,
   computeRentTaxBreakdown,
 } from 'src/common/tax/rent-period.util';
+import { nextInvoiceNumber } from 'src/common/pdf/invoice-number.util';
+import { toUtcDate, todayDate } from 'src/common/lease/lease-cycles.util';
 
 const paymentInclude = {
   tenant: { select: { id: true, name: true, email: true } },
@@ -44,26 +46,44 @@ export class PaymentsService {
   ) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: dto.tenantId, buildingId, deletedAt: null },
-      include: {
-        leases: {
-          where: { status: 'active', unitId: dto.unitId, deletedAt: null },
-          orderBy: { startDate: 'desc' },
-          take: 1,
-        },
-      },
+      select: { id: true },
     });
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found in this building');
     }
 
-    const activeLease = tenant.leases[0];
-    if (!activeLease) {
-      throw new BadRequestException('Tenant has no active lease for this unit');
+    if (toUtcDate(dto.paymentDate) > todayDate()) {
+      throw new BadRequestException('Payment date cannot be in the future');
     }
 
-    const [invoiceNumber, building] = await Promise.all([
-      this.generateInvoiceNumber(buildingId),
+    const months = [...new Set(dto.monthsCovered ?? [])];
+    if (dto.type === 'rent' && months.length === 0) {
+      throw new BadRequestException(
+        'Rent payments must cover at least one payment period',
+      );
+    }
+
+    // Rent settles the lease that owns the periods, which may already have
+    // ended (arrears after termination/expiry); other payments go to the
+    // tenant's current lease on the unit, else their latest one there
+    const activeLease = await this.prisma.lease.findFirst({
+      where: {
+        tenantId: dto.tenantId,
+        unitId: dto.unitId,
+        buildingId,
+        deletedAt: null,
+        ...(dto.type === 'rent' && {
+          paymentPeriods: { some: { month: { in: months } } },
+        }),
+      },
+      orderBy: [{ status: 'asc' }, { startDate: 'desc' }],
+    });
+    if (!activeLease) {
+      throw new BadRequestException('Tenant has no lease for this unit');
+    }
+
+    const [building] = await Promise.all([
       this.prisma.building.findUnique({
         where: { id: buildingId },
         select: {
@@ -85,16 +105,11 @@ export class PaymentsService {
     let paymentAmount = dto.amount;
 
     if (dto.type === 'rent') {
-      if (!dto.monthsCovered || dto.monthsCovered.length === 0) {
-        throw new BadRequestException(
-          'Rent payments must cover at least one payment period',
-        );
-      }
       const periods = await this.prisma.paymentPeriod.findMany({
-        where: { leaseId: activeLease.id, month: { in: dto.monthsCovered } },
+        where: { leaseId: activeLease.id, month: { in: months } },
         select: { month: true, status: true, rentAmount: true },
       });
-      baseAmount = computeRentBaseAmount(periods, dto.monthsCovered);
+      baseAmount = computeRentBaseAmount(periods, months);
       const breakdown = computeRentTaxBreakdown(
         baseAmount,
         Number(building?.vatRate ?? 0),
@@ -140,67 +155,74 @@ export class PaymentsService {
             },
           ];
 
-    const payment = await this.prisma.$transaction(async (tx) => {
-      const newPayment = await tx.payment.create({
-        data: {
-          buildingId,
-          tenantId: dto.tenantId,
-          unitId: activeLease.unitId,
-          amount: paymentAmount,
-          baseAmount: dto.type === 'rent' ? baseAmount : undefined,
-          vatAmount: dto.type === 'rent' ? vatAmount : undefined,
-          withholdingAmount:
-            dto.type === 'rent' ? withholdingAmount : undefined,
-          type: dto.type,
-          status: 'completed',
-          paymentDate: new Date(dto.paymentDate),
-          notes: dto.notes,
-        },
-      });
-
-      const invoice = await tx.invoice.create({
-        data: {
-          buildingId,
-          tenantId: dto.tenantId,
-          unitId: activeLease.unitId,
-          invoiceNumber,
-          amount: paymentAmount,
-          dueDate: new Date(dto.paymentDate),
-          status: 'paid',
-          items: invoiceItems as Prisma.InputJsonValue,
-          notes: dto.notes,
-        },
-      });
-
-      await tx.payment.update({
-        where: { id: newPayment.id },
-        data: { invoiceId: invoice.id },
-      });
-
-      // Mark payment periods as paid
-      if (
-        dto.type === 'rent' &&
-        dto.monthsCovered &&
-        dto.monthsCovered.length > 0
-      ) {
-        await tx.paymentPeriod.updateMany({
-          where: {
-            leaseId: activeLease.id,
-            month: { in: dto.monthsCovered },
-          },
+    let invoiceNumber = '';
+    const payment = await this.withInvoiceNumberRetry(async () =>
+      this.prisma.$transaction(async (tx) => {
+        invoiceNumber = await nextInvoiceNumber(tx, buildingId);
+        const newPayment = await tx.payment.create({
           data: {
-            status: 'paid',
-            paidAt: new Date(dto.paymentDate),
-            paymentId: newPayment.id,
+            buildingId,
+            tenantId: dto.tenantId,
+            unitId: activeLease.unitId,
+            amount: paymentAmount,
+            baseAmount: dto.type === 'rent' ? baseAmount : undefined,
+            vatAmount: dto.type === 'rent' ? vatAmount : undefined,
+            withholdingAmount:
+              dto.type === 'rent' ? withholdingAmount : undefined,
+            type: dto.type,
+            status: 'completed',
+            paymentDate: new Date(dto.paymentDate),
+            notes: dto.notes,
           },
         });
-      }
 
-      return await tx.payment.findUnique({
-        where: { id: newPayment.id },
-        include: paymentInclude,
-      });
-    });
+        const invoice = await tx.invoice.create({
+          data: {
+            buildingId,
+            tenantId: dto.tenantId,
+            unitId: activeLease.unitId,
+            invoiceNumber,
+            amount: paymentAmount,
+            dueDate: new Date(dto.paymentDate),
+            status: 'paid',
+            items: invoiceItems as Prisma.InputJsonValue,
+            notes: dto.notes,
+          },
+        });
+
+        await tx.payment.update({
+          where: { id: newPayment.id },
+          data: { invoiceId: invoice.id },
+        });
+
+        // Mark payment periods as paid; only still-open periods can be claimed,
+        // so a concurrent payment for the same months rolls this one back
+        if (dto.type === 'rent') {
+          const claimed = await tx.paymentPeriod.updateMany({
+            where: {
+              leaseId: activeLease.id,
+              month: { in: months },
+              status: { in: ['unpaid', 'overdue'] },
+            },
+            data: {
+              status: 'paid',
+              paidAt: new Date(dto.paymentDate),
+              paymentId: newPayment.id,
+            },
+          });
+          if (claimed.count !== months.length) {
+            throw new ConflictException(
+              'Some of these periods were just paid by another payment. Refresh and try again.',
+            );
+          }
+        }
+
+        return await tx.payment.findUnique({
+          where: { id: newPayment.id },
+          include: paymentInclude,
+        });
+      }),
+    );
 
     const userName = await this.getUserName(userId, userRole);
     await this.activityLogsService.create({
@@ -370,8 +392,20 @@ export class PaymentsService {
       this.prisma.tenant.findFirst({
         where: { id: tenantId, buildingId, deletedAt: null },
         include: {
+          // Current leases, plus ended ones that still have rent owing
           leases: {
-            where: { status: 'active', deletedAt: null },
+            where: {
+              deletedAt: null,
+              OR: [
+                { status: 'active' },
+                {
+                  paymentPeriods: {
+                    some: { status: { in: ['unpaid', 'overdue'] } },
+                  },
+                },
+              ],
+            },
+            orderBy: { startDate: 'desc' },
             include: {
               unit: { select: { id: true, unitNumber: true, floor: true } },
               paymentPeriods: { orderBy: { month: 'asc' } },
@@ -397,6 +431,7 @@ export class PaymentsService {
       unitId: lease.unitId,
       unitNumber: lease.unit.unitNumber,
       unitFloor: lease.unit.floor ?? undefined,
+      status: lease.status,
       startDate: lease.startDate,
       endDate: lease.endDate,
       rentAmount: lease.rentAmount,
@@ -407,30 +442,18 @@ export class PaymentsService {
     }));
   }
 
-  private async generateInvoiceNumber(buildingId: string): Promise<string> {
-    const year = new Date().getFullYear();
-    let invoiceNumber: string;
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      const count = await this.prisma.invoice.count({ where: { buildingId } });
-      invoiceNumber = `INV-${year}-${String(count + 1).padStart(5, '0')}`;
-
-      // Check if this number already exists
-      const existing = await this.prisma.invoice.findUnique({
-        where: { invoiceNumber },
-      });
-
-      if (!existing) {
-        return invoiceNumber;
+  /** Retries when two payments race for the same invoice number. */
+  private async withInvoiceNumberRetry<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        const isNumberClash =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!isNumberClash || attempt >= 4) throw error;
       }
-
-      attempts++;
     }
-
-    const timestamp = Date.now();
-    return `INV-${year}-${timestamp}`;
   }
 
   private async getUserName(userId: string, userRole: string): Promise<string> {
@@ -469,6 +492,20 @@ export class PaymentsService {
         'This payment request has already been processed',
       );
     }
+    // Claim the request first so two reviewers can't both approve it
+    const claim = await this.prisma.tenantPaymentRequest.updateMany({
+      where: { id: requestId, status: 'pending' },
+      data: {
+        status: 'approved',
+        reviewedAt: new Date(),
+        reviewedById: userId,
+      },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException(
+        'This payment request has already been processed',
+      );
+    }
     const monthsCovered = request.monthsCovered as string[] | undefined;
     const dto: CreatePaymentDto = {
       tenantId: request.tenantId,
@@ -479,15 +516,17 @@ export class PaymentsService {
       monthsCovered,
       notes: request.notes ?? undefined,
     };
-    const payment = await this.create(buildingId, dto, userId, userRole);
-    await this.prisma.tenantPaymentRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'approved',
-        reviewedAt: new Date(),
-        reviewedById: userId,
-      },
-    });
+    let payment: Awaited<ReturnType<PaymentsService['create']>>;
+    try {
+      payment = await this.create(buildingId, dto, userId, userRole);
+    } catch (error) {
+      // Recording failed (e.g. amount no longer matches): hand it back
+      await this.prisma.tenantPaymentRequest.update({
+        where: { id: requestId },
+        data: { status: 'pending', reviewedAt: null, reviewedById: null },
+      });
+      throw error;
+    }
     await this.notificationsService.create({
       userId: request.tenantId,
       userType: 'tenant',

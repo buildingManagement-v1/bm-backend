@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsString,
   IsOptional,
+  IsString,
   IsUUID,
   IsEnum,
   IsDateString,
   IsNumber,
   IsArray,
+  ArrayMaxSize,
+  IsPositive,
+  Matches,
 } from 'class-validator';
 import { PaymentType } from 'generated/prisma/enums';
 
@@ -20,7 +23,8 @@ export class CreatePaymentDto {
   unitId!: string;
 
   @ApiProperty({ example: 1000 })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   amount!: number;
 
   @ApiProperty({ enum: PaymentType, example: PaymentType['rent'] })
@@ -34,8 +38,12 @@ export class CreatePaymentDto {
   @ApiProperty({ example: ['2025-01', '2025-02'], required: false })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  monthsCovered?: string[]; // Format: ["2025-01", "2025-02"]
+  @ArrayMaxSize(36)
+  @Matches(/^\d{4}-\d{2}(-\d{2})?$/, {
+    each: true,
+    message: 'monthsCovered must contain period keys like 2026-01-01',
+  })
+  monthsCovered?: string[]; // period keys (periodStart dates), e.g. ["2026-01-01"]
 
   @ApiProperty({ example: 'January rent payment', required: false })
   @IsOptional()

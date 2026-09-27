@@ -21,6 +21,13 @@ import { EmailService } from 'src/common/email/email.service';
 import { SoftDeleteService } from 'src/common/soft-delete/soft-delete.service';
 import { UserDeletionService } from 'src/common/user-deletion/user-deletion.service';
 import { OtpType, UserType } from 'generated/prisma/client';
+import {
+  AuthTokenPayload,
+  issuedBeforePasswordChange,
+  signAccessToken,
+  signAuthTokens,
+  verifyRefreshToken,
+} from 'src/common/token/auth-tokens';
 
 @Injectable()
 export class AuthService {
@@ -136,18 +143,10 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: 'owner',
-      type: 'app',
-    };
-
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshExpiry = dto.rememberMe === false ? '24h' : '30d';
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: refreshExpiry,
-    });
+    const { accessToken, refreshToken } = this.issueTokens(
+      user,
+      dto.rememberMe === false ? '24h' : '30d',
+    );
 
     return {
       accessToken,
@@ -157,6 +156,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
       },
+      mustResetPassword: user.mustResetPassword,
     };
   }
 
@@ -203,6 +203,7 @@ export class AuthService {
       data: {
         passwordHash: hashedPassword,
         passwordChangedAt: new Date(),
+        mustResetPassword: false,
       },
     });
 
@@ -229,18 +230,30 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
 
-    await this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         passwordHash: hashedPassword,
         passwordChangedAt: new Date(),
+        mustResetPassword: false,
       },
     });
 
-    return { message: 'Password changed successfully' };
+    // Older sessions are revoked by passwordChangedAt; hand this one new tokens
+    return {
+      message: 'Password changed successfully',
+      ...this.issueTokens(updated, '30d'),
+    };
   }
 
   async updateEmail(userId: string, dto: UpdateEmailDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (
+      !user ||
+      !(await bcrypt.compare(dto.currentPassword, user.passwordHash))
+    ) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -294,37 +307,41 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    try {
-      const payload = this.jwtService.verify<{
-        sub: string;
-        email: string;
-        role: string;
-        type: string;
-      }>(refreshToken);
-
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-      });
-
-      if (!user || user.status === 'inactive' || user.deletedAt) {
-        throw new UnauthorizedException('Invalid token');
-      }
-
-      const newPayload = {
-        sub: user.id,
-        email: user.email,
-        role: 'owner',
-        type: 'app',
-      };
-
-      const accessToken = this.jwtService.sign(newPayload, {
-        expiresIn: '15m',
-      });
-
-      return { accessToken };
-    } catch (error) {
-      console.error(error);
+    const payload = verifyRefreshToken(this.jwtService, refreshToken);
+    if (payload.type !== 'app' || payload.role !== 'owner') {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (
+      !user ||
+      user.status === 'inactive' ||
+      user.deletedAt ||
+      issuedBeforePasswordChange(payload.iat, user.passwordChangedAt)
+    ) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return {
+      accessToken: signAccessToken(this.jwtService, this.payloadFor(user)),
+    };
+  }
+
+  private payloadFor(user: { id: string; email: string }): AuthTokenPayload {
+    return { sub: user.id, email: user.email, role: 'owner', type: 'app' };
+  }
+
+  private issueTokens(
+    user: { id: string; email: string },
+    refreshExpiresIn: '24h' | '30d',
+  ) {
+    return signAuthTokens(
+      this.jwtService,
+      this.payloadFor(user),
+      refreshExpiresIn,
+    );
   }
 }
