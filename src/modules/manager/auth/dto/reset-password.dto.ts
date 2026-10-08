@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength, IsNotEmpty } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class ResetPasswordDto {
   @ApiProperty({ example: 'manager@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

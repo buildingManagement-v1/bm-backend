@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ManagerRole } from 'generated/prisma/client';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 class BuildingRoleAssignment {
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174003' })
@@ -32,6 +33,7 @@ export class CreateManagerDto {
   name: string;
 
   @ApiProperty({ example: 'john.doe@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

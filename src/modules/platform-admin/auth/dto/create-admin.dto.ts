@@ -8,6 +8,7 @@ import {
   IsArray,
 } from 'class-validator';
 import { PlatformAdminRole } from 'generated/prisma/enums';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class CreateAdminDto {
   @ApiProperty({ example: 'Admin Name' })
@@ -16,6 +17,7 @@ export class CreateAdminDto {
   name: string;
 
   @ApiProperty({ example: 'admin@bms.com' })
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

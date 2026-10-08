@@ -46,7 +46,7 @@ export class SchedulerService {
    * cycle's collection day (its start) has passed. Tenants get one notice per
    * newly overdue batch; owners/payment managers get a summary per building.
    */
-  @Cron('5 0 * * *', cronOptions)
+  @Cron('5 0 * * *', { ...cronOptions, name: 'mark-overdue-rent' })
   async markOverduePaymentPeriods() {
     const today = todayDate();
     const candidates = await this.prisma.paymentPeriod.findMany({
@@ -146,7 +146,7 @@ export class SchedulerService {
   }
 
   /** One reminder per rent cycle, a few days before its collection day. */
-  @Cron('0 8 * * *', cronOptions)
+  @Cron('0 8 * * *', { ...cronOptions, name: 'rent-due-reminders' })
   async sendRentDueReminders() {
     const today = todayDate();
     const periods = await this.prisma.paymentPeriod.findMany({
@@ -206,7 +206,7 @@ export class SchedulerService {
   }
 
   /** Leases whose end date has passed expire and release the unit. */
-  @Cron('10 0 * * *', cronOptions)
+  @Cron('10 0 * * *', { ...cronOptions, name: 'expire-leases' })
   async checkExpiredLeases() {
     const today = todayDate();
     const expired = await this.prisma.lease.findMany({
@@ -269,7 +269,7 @@ export class SchedulerService {
   }
 
   /** One notice per lease, to tenant and staff, 30 days before it ends. */
-  @Cron('0 11 * * *', cronOptions)
+  @Cron('0 11 * * *', { ...cronOptions, name: 'lease-expiry-notices' })
   async checkExpiringLeases() {
     const today = todayDate();
     const leases = await this.prisma.lease.findMany({
@@ -330,7 +330,10 @@ export class SchedulerService {
 
   // ========== SUBSCRIPTIONS ==========
 
-  @Cron('0 9 * * *', cronOptions)
+  @Cron('0 9 * * *', {
+    ...cronOptions,
+    name: 'subscription-expiry-reminders',
+  })
   async checkExpiringSubscriptions() {
     const now = new Date();
     const subscriptions = await this.prisma.subscription.findMany({
@@ -387,7 +390,7 @@ export class SchedulerService {
     return subscriptions.length;
   }
 
-  @Cron('0 10 * * *', cronOptions)
+  @Cron('0 10 * * *', { ...cronOptions, name: 'expire-subscriptions' })
   async checkExpiredSubscriptions() {
     const expired = await this.prisma.subscription.findMany({
       where: { status: 'active', billingCycleEnd: { lt: new Date() } },
@@ -429,14 +432,20 @@ export class SchedulerService {
 
   // ========== HOUSEKEEPING ==========
 
-  @Cron(CronExpression.EVERY_DAY_AT_2AM, cronOptions)
+  @Cron(CronExpression.EVERY_DAY_AT_2AM, {
+    ...cronOptions,
+    name: 'purge-deleted-owners',
+  })
   async purgeDeletedUsers() {
     const purged = await this.userDeletionService.purgeExpiredUsers();
     this.logger.log(`Purged ${purged} owner account(s)`);
     return purged;
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM, cronOptions)
+  @Cron(CronExpression.EVERY_DAY_AT_3AM, {
+    ...cronOptions,
+    name: 'cleanup-otps',
+  })
   async cleanupOtps() {
     const removed = await this.tokenService.deleteExpiredOTPs();
     this.logger.log(`Removed ${removed} used/expired OTP(s)`);

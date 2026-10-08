@@ -7,6 +7,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class UpdateAccountStatusDto {
   @ApiProperty({ enum: ['active', 'inactive'] })
@@ -22,6 +23,7 @@ export class CreateOwnerDto {
   name!: string;
 
   @ApiProperty({ example: 'owner@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

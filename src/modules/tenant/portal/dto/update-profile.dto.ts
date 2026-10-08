@@ -7,10 +7,12 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class UpdateTenantProfileDto {
   @ApiProperty({ required: false, example: 'tenant@example.com' })
   @IsOptional()
+  @NormalizeEmail()
   @IsEmail()
   email?: string;
 

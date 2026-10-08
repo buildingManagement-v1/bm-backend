@@ -29,7 +29,7 @@ import {
   computeRentTaxBreakdown,
 } from 'src/common/tax/rent-period.util';
 import { PdfService } from 'src/common/pdf/pdf.service';
-import { parseInvoiceItems } from 'src/common/pdf/invoice-items.util';
+import { loadPaymentInvoice } from 'src/common/pdf/payment-invoice.loader';
 
 @Injectable()
 export class PortalService {
@@ -44,35 +44,14 @@ export class PortalService {
   async downloadInvoice(tenantId: string, invoiceId: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, tenantId },
-      include: {
-        tenant: { select: { name: true, email: true } },
-        unit: { select: { unitNumber: true } },
-      },
+      select: { id: true },
     });
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
-
-    const building = await this.prisma.building.findUnique({
-      where: { id: invoice.buildingId },
-      select: { name: true, address: true },
-    });
-
-    return this.pdfService.generatePaymentInvoice({
-      invoiceNumber: invoice.invoiceNumber,
-      date: invoice.createdAt,
-      dueDate: invoice.dueDate,
-      buildingName: building?.name || 'Building',
-      buildingAddress: building?.address || undefined,
-      tenantName: invoice.tenant?.name || 'Tenant',
-      tenantEmail: invoice.tenant?.email || '',
-      items: parseInvoiceItems(invoice.items, {
-        description: `Rent for Unit ${invoice.unit?.unitNumber || 'N/A'}`,
-        amount: Number(invoice.amount),
-      }),
-      total: Number(invoice.amount),
-      status: invoice.status,
-    });
+    return this.pdfService.generatePaymentInvoice(
+      await loadPaymentInvoice(this.prisma, invoice.id),
+    );
   }
 
   async getProfile(tenantId: string) {

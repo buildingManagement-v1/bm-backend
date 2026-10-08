@@ -18,6 +18,7 @@ import {
   computeRentTaxBreakdown,
 } from 'src/common/tax/rent-period.util';
 import { nextInvoiceNumber } from 'src/common/pdf/invoice-number.util';
+import { loadPaymentInvoice } from 'src/common/pdf/payment-invoice.loader';
 import { toUtcDate, todayDate } from 'src/common/lease/lease-cycles.util';
 
 const paymentInclude = {
@@ -241,44 +242,10 @@ export class PaymentsService {
       } as Prisma.InputJsonValue,
     });
 
-    // Generate PDF invoice
-    const buildingAddress = building?.address
-      ? `${building.address}${building.city ? ', ' + building.city : ''}${building.country ? ', ' + building.country : ''}`
-      : undefined;
-
-    const unit = await this.prisma.unit.findUnique({
-      where: { id: activeLease.unitId },
-      select: { unitNumber: true },
-    });
-
-    const pdfItems =
-      dto.type === 'rent'
-        ? invoiceItems.map((item, i) =>
-            i === 0
-              ? {
-                  ...item,
-                  description: `${item.description} - Unit ${unit?.unitNumber || 'N/A'}`,
-                }
-              : item,
-          )
-        : [
-            {
-              description: `${dto.type.charAt(0).toUpperCase() + dto.type.slice(1)} Payment - Unit ${unit?.unitNumber || 'N/A'}`,
-              amount: paymentAmount,
-            },
-          ];
-
-    const pdfDoc = this.pdfService.generatePaymentInvoice({
-      invoiceNumber,
-      date: payment!.paymentDate,
-      buildingName: building?.name || 'Building',
-      buildingAddress,
-      tenantName: payment!.tenant.name,
-      tenantEmail: payment!.tenant.email,
-      items: pdfItems,
-      total: paymentAmount,
-      status: 'paid',
-    });
+    // Same document the owner and tenant download later
+    const pdfDoc = this.pdfService.generatePaymentInvoice(
+      await loadPaymentInvoice(this.prisma, payment!.invoice!.id),
+    );
 
     // Convert PDF stream to buffer
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {

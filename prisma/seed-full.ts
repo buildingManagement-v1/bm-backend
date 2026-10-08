@@ -1,15 +1,33 @@
 /**
- * Full test data seed.
- * Run after the default seed so subscription plans exist:
- *   npx prisma db seed     (runs prisma/seed.ts)
- *   npm run seed:full      (runs this file)
- * Does not remove or replace existing seed data.
- * All passwords: Asdf@#1234
+ * Demo data seed, built the same way the API builds it:
+ *   - 3 owners (2 on Pro after an expired trial, 1 on an active Free trial)
+ *   - 5 buildings with tax/collection-day settings, 8 units each
+ *   - 4 managers, each scoped only to their own owner's buildings
+ *   - tenants with leases whose rent cycles come from generateCycles(),
+ *     every paid cycle backed by a real Payment + INV-YYYY-NNNNN receipt
+ *     (tax split per rent-period.util), some cycles unpaid/overdue,
+ *     one expired lease that still owes rent
+ *   - parking registrations, a pending parking request, maintenance
+ *     requests and announcements
+ *
+ * Deterministic: the same run always produces the same data (dates are
+ * relative to today). Meant for a freshly reset database:
+ *   npm run db:reset     (drop everything, migrate, base seed)
+ *   npm run seed:full    (this file)
+ * All demo passwords: Asdf@#1234
  */
 import { PrismaClient } from '../generated/prisma/client';
+import type { ManagerRole, UnitType } from '../generated/prisma/enums';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
+import {
+  addDays,
+  generateCycles,
+  todayDate,
+} from '../src/common/lease/lease-cycles.util';
+import { computeRentTaxBreakdown } from '../src/common/tax/rent-period.util';
+import { FREE_TRIAL_MONTHS } from '../src/common/plan-limits/free-plan.util';
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -17,658 +35,860 @@ const adapter = new PrismaPg({
 
 const prisma = new PrismaClient({ adapter });
 
-const TEST_PASSWORD = 'Asdf@#1234';
+const DEMO_PASSWORD = 'Asdf@#1234';
+const today = todayDate();
 
-function addMonths(d: Date, months: number): Date {
-  const out = new Date(d);
-  out.setMonth(out.getMonth() + months);
-  return out;
+/** Same calendar day `months` months away (clamped to month end), UTC. */
+function shiftMonths(d: Date, months: number, day = d.getUTCDate()): Date {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + months;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(day, lastDay)));
 }
 
-function monthString(d: Date): string {
-  return d.toISOString().slice(0, 7); // YYYY-MM
+// ---------------------------------------------------------------------------
+// Demo layout
+// ---------------------------------------------------------------------------
+
+type PlanName = 'Pro' | 'Free';
+
+const OWNERS: {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+  plan: PlanName;
+}[] = [
+  {
+    key: 'o1',
+    name: 'Abebe Kebede',
+    email: 'owner1@test.com',
+    phone: '+251911111111',
+    plan: 'Pro',
+  },
+  {
+    key: 'o2',
+    name: 'Tigist Hailu',
+    email: 'owner2@test.com',
+    phone: '+251922222222',
+    plan: 'Pro',
+  },
+  {
+    key: 'o3',
+    name: 'Dawit Bekele',
+    email: 'owner3@test.com',
+    phone: '+251933333333',
+    plan: 'Free',
+  },
+];
+
+const BUILDINGS: {
+  key: string;
+  owner: string;
+  name: string;
+  address: string;
+  vatRate: number;
+  withholdingRate: number;
+  paymentCollectionDay: number;
+  totalParkingLots: number;
+  baseRent: number;
+  unitTypes: UnitType[];
+}[] = [
+  {
+    key: 'bole',
+    owner: 'o1',
+    name: 'Bole Heights',
+    address: 'Bole Road, near Edna Mall',
+    vatRate: 15,
+    withholdingRate: 2,
+    paymentCollectionDay: 1,
+    totalParkingLots: 10,
+    baseRent: 18000,
+    unitTypes: [
+      'retail',
+      'retail',
+      'office',
+      'office',
+      'office',
+      'office',
+      'restaurant',
+      'storage',
+    ],
+  },
+  {
+    key: 'kazanchis',
+    owner: 'o1',
+    name: 'Kazanchis Tower',
+    address: 'Kazanchis, Africa Ave',
+    vatRate: 15,
+    withholdingRate: 0,
+    paymentCollectionDay: 5,
+    totalParkingLots: 6,
+    baseRent: 15000,
+    unitTypes: [
+      'retail',
+      'office',
+      'office',
+      'office',
+      'office',
+      'office',
+      'office',
+      'storage',
+    ],
+  },
+  {
+    key: 'cmc',
+    owner: 'o2',
+    name: 'CMC Plaza',
+    address: 'CMC area, Jemo',
+    vatRate: 0,
+    withholdingRate: 0,
+    paymentCollectionDay: 1,
+    totalParkingLots: 8,
+    baseRent: 9000,
+    unitTypes: [
+      'retail',
+      'retail',
+      'retail',
+      'restaurant',
+      'office',
+      'office',
+      'storage',
+      'other',
+    ],
+  },
+  {
+    key: 'sarbet',
+    owner: 'o2',
+    name: 'Sarbet Residences',
+    address: 'Sarbet, behind Bole Medhanialem',
+    vatRate: 15,
+    withholdingRate: 2,
+    paymentCollectionDay: 10,
+    totalParkingLots: 5,
+    baseRent: 12000,
+    unitTypes: [
+      'guest_house',
+      'guest_house',
+      'guest_house',
+      'guest_house',
+      'office',
+      'office',
+      'retail',
+      'storage',
+    ],
+  },
+  {
+    key: 'piassa',
+    owner: 'o3',
+    name: 'Piassa Commercial',
+    address: 'Piassa, Churchill Ave',
+    vatRate: 15,
+    withholdingRate: 2,
+    paymentCollectionDay: 1,
+    totalParkingLots: 4,
+    baseRent: 11000,
+    unitTypes: [
+      'retail',
+      'retail',
+      'retail',
+      'restaurant',
+      'office',
+      'office',
+      'office',
+      'storage',
+    ],
+  },
+];
+
+const UNIT_NUMBERS = ['101', '102', '201', '202', '301', '302', '401', '402'];
+
+const MANAGERS: {
+  owner: string;
+  name: string;
+  email: string;
+  phone: string;
+  buildings: { building: string; roles: ManagerRole[] }[];
+}[] = [
+  {
+    owner: 'o1',
+    name: 'Selam Tesfaye',
+    email: 'manager1@test.com',
+    phone: '+251941111111',
+    buildings: [
+      {
+        building: 'bole',
+        roles: ['tenant_manager', 'payment_manager', 'reports_viewer'],
+      },
+      { building: 'kazanchis', roles: ['payment_manager', 'reports_viewer'] },
+    ],
+  },
+  {
+    owner: 'o1',
+    name: 'Biruk Alemu',
+    email: 'manager2@test.com',
+    phone: '+251942222222',
+    buildings: [
+      {
+        building: 'bole',
+        roles: ['maintenance_manager', 'operations_manager'],
+      },
+      {
+        building: 'kazanchis',
+        roles: ['tenant_manager', 'maintenance_manager'],
+      },
+    ],
+  },
+  {
+    owner: 'o2',
+    name: 'Hanna Wolde',
+    email: 'manager3@test.com',
+    phone: '+251943333333',
+    buildings: [
+      { building: 'cmc', roles: ['tenant_manager', 'payment_manager'] },
+      { building: 'sarbet', roles: ['operations_manager', 'reports_viewer'] },
+    ],
+  },
+  {
+    owner: 'o3',
+    name: 'Samuel Getachew',
+    email: 'manager4@test.com',
+    phone: '+251944444444',
+    buildings: [
+      {
+        building: 'piassa',
+        roles: [
+          'tenant_manager',
+          'payment_manager',
+          'maintenance_manager',
+          'operations_manager',
+          'reports_viewer',
+        ],
+      },
+    ],
+  },
+];
+
+const TENANT_NAMES = [
+  'Sara Ahmed',
+  'Yonas Desta',
+  'Meron Tesfaye',
+  'Habtamu Girma',
+  'Ephrem Tadesse',
+  'Helen Getachew',
+  'Kaleb Abebe',
+  'Dina Mohammed',
+  'Rahel Mekonnen',
+  'Nahom Assefa',
+  'Liya Solomon',
+  'Bereket Yohannes',
+  'Mahlet Kassa',
+  'Fitsum Haile',
+  'Eden Berhane',
+  'Robel Negash',
+  'Tsion Mulugeta',
+  'Henok Worku',
+  'Bethlehem Ayele',
+  'Abel Tilahun',
+  'Hiwot Demissie',
+  'Mikias Fekadu',
+  'Saron Lemma',
+  'Yared Shiferaw',
+  'Kidist Taye',
+];
+
+/**
+ * Per building, tenant slot i leases unit i:
+ *  - monthsAgo: lease starts on the collection day this many months back
+ *  - midMonth:  start on the 15th instead (prorated first/last cycles)
+ *  - unpaid:    how many of the most recent due cycles are left unpaid
+ * Slot 4 has an expired lease with arrears in the first building and no
+ * lease (inactive prospect) elsewhere.
+ */
+const LEASE_SLOTS: {
+  monthsAgo: number;
+  midMonth: boolean;
+  unpaid: number;
+  carsAllowed: number;
+  plates: number;
+  applyWithholding: boolean;
+}[] = [
+  {
+    monthsAgo: 8,
+    midMonth: false,
+    unpaid: 0,
+    carsAllowed: 1,
+    plates: 1,
+    applyWithholding: false,
+  },
+  {
+    monthsAgo: 5,
+    midMonth: false,
+    unpaid: 1,
+    carsAllowed: 2,
+    plates: 1,
+    applyWithholding: true,
+  },
+  {
+    monthsAgo: 3,
+    midMonth: true,
+    unpaid: 2,
+    carsAllowed: 0,
+    plates: 0,
+    applyWithholding: false,
+  },
+  {
+    monthsAgo: 1,
+    midMonth: false,
+    unpaid: 0,
+    carsAllowed: 0,
+    plates: 0,
+    applyWithholding: false,
+  },
+];
+
+const MAINTENANCE = [
+  {
+    slot: 0,
+    title: 'Water leak under the sink',
+    description: 'Water is dripping from the pipe under the kitchen sink.',
+    priority: 'high',
+    status: 'pending',
+  },
+  {
+    slot: 1,
+    title: 'AC not cooling',
+    description: 'The air conditioner runs but the room stays warm.',
+    priority: 'medium',
+    status: 'in_progress',
+  },
+  {
+    slot: 3,
+    title: 'Front door lock broken',
+    description: 'The key no longer turns in the front door lock.',
+    priority: 'urgent',
+    status: 'completed',
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+
+interface PaymentDraft {
+  tenantId: string;
+  unitId: string;
+  type: 'rent' | 'deposit';
+  paymentDate: Date;
+  baseAmount: number;
+  vatAmount: number;
+  withholdingAmount: number;
+  totalAmount: number;
+  items: { description: string; amount: number }[];
+  periodIds: string[];
 }
 
 async function main() {
-  const hashedPassword = await bcrypt.hash(TEST_PASSWORD, 10);
-
-  // Ensure plans exist (from main seed)
-  const freePlan = await prisma.subscriptionPlan.findFirst({
-    where: { name: { equals: 'Free', mode: 'insensitive' } },
-  });
-  const proPlan = await prisma.subscriptionPlan.findFirst({
-    where: { name: { equals: 'Pro', mode: 'insensitive' } },
-  });
+  const [freePlan, proPlan] = await Promise.all(
+    ['Free', 'Pro'].map((name) =>
+      prisma.subscriptionPlan.findUnique({ where: { name } }),
+    ),
+  );
   if (!freePlan || !proPlan) {
-    throw new Error(
-      'Run the default seed first (npm run seed) to create subscription plans.',
+    throw new Error('Run the base seed first (npx prisma db seed).');
+  }
+  if (await prisma.user.findUnique({ where: { email: OWNERS[0].email } })) {
+    console.log(
+      'Demo data already present. Run `npm run db:reset` first for a fresh copy.',
     );
+    return;
   }
 
-  // ---------- 3 owner users ----------
-  const owner1 = await prisma.user.upsert({
-    where: { email: 'owner1@test.com' },
-    update: {},
-    create: {
-      name: 'Abebe Kebede',
-      email: 'owner1@test.com',
-      passwordHash: hashedPassword,
-      phone: '+251911111111',
-      status: 'active',
-    },
-  });
-  const owner2 = await prisma.user.upsert({
-    where: { email: 'owner2@test.com' },
-    update: {},
-    create: {
-      name: 'Tigist Hailu',
-      email: 'owner2@test.com',
-      passwordHash: hashedPassword,
-      phone: '+251922222222',
-      status: 'active',
-    },
-  });
-  const owner3 = await prisma.user.upsert({
-    where: { email: 'owner3@test.com' },
-    update: {},
-    create: {
-      name: 'Dawit Bekele',
-      email: 'owner3@test.com',
-      passwordHash: hashedPassword,
-      phone: '+251933333333',
-      status: 'active',
-    },
-  });
-  console.log(
-    'Users created/updated:',
-    owner1.email,
-    owner2.email,
-    owner3.email,
-  );
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
-  // ---------- Subscriptions (Pro plan, 1 year) ----------
-  const cycleStart = new Date();
-  cycleStart.setDate(1);
-  cycleStart.setHours(0, 0, 0, 0);
-  const cycleEnd = addMonths(cycleStart, 12);
-  const nextBilling = new Date(cycleEnd);
-
-  for (const user of [owner1, owner2, owner3]) {
-    const existing = await prisma.subscription.findFirst({
-      where: { userId: user.id, status: 'active' },
+  // ---------- Owners + subscriptions ----------
+  const owners = new Map<string, { id: string; name: string }>();
+  for (const o of OWNERS) {
+    const user = await prisma.user.create({
+      data: {
+        name: o.name,
+        email: o.email,
+        phone: o.phone,
+        passwordHash,
+        status: 'active',
+      },
+      select: { id: true, name: true },
     });
-    if (!existing) {
-      const sub = await prisma.subscription.create({
+    owners.set(o.key, user);
+
+    // Every owner starts on the one-time Free trial; Pro owners moved on
+    // after it ran out, the Free owner is still inside it
+    const trialStart =
+      o.plan === 'Pro' ? shiftMonths(today, -6) : shiftMonths(today, -1);
+    const trialEnd = shiftMonths(trialStart, FREE_TRIAL_MONTHS);
+    const trial = await prisma.subscription.create({
+      data: {
+        userId: user.id,
+        planId: freePlan.id,
+        totalAmount: 0,
+        billingCycleStart: trialStart,
+        billingCycleEnd: trialEnd,
+        nextBillingDate: trialEnd,
+        status: o.plan === 'Pro' ? 'expired' : 'active',
+      },
+    });
+    await prisma.subscriptionHistory.create({
+      data: {
+        userId: user.id,
+        subscriptionId: trial.id,
+        action: 'created',
+        newPlanId: freePlan.id,
+        notes: `${FREE_TRIAL_MONTHS}-month free trial`,
+        createdAt: trialStart,
+      },
+    });
+
+    if (o.plan === 'Pro') {
+      const proEnd = shiftMonths(trialEnd, 12);
+      const pro = await prisma.subscription.create({
         data: {
           userId: user.id,
           planId: proPlan.id,
-          totalAmount: Number(proPlan.price),
-          billingCycleStart: cycleStart,
-          billingCycleEnd: cycleEnd,
-          nextBillingDate: nextBilling,
+          totalAmount: proPlan.price,
+          billingCycleStart: trialEnd,
+          billingCycleEnd: proEnd,
+          nextBillingDate: proEnd,
           status: 'active',
         },
       });
       await prisma.subscriptionHistory.create({
         data: {
           userId: user.id,
-          subscriptionId: sub.id,
+          subscriptionId: pro.id,
           action: 'created',
           newPlanId: proPlan.id,
+          createdAt: trialEnd,
         },
       });
     }
   }
-  console.log('Subscriptions ensured for owners.');
+  console.log('Owners + subscriptions:', owners.size);
 
-  // ---------- Buildings ----------
-  const buildingsData: {
-    userId: string;
-    name: string;
-    address: string;
-    city: string;
-    country: string;
-  }[] = [
-    {
-      userId: owner1.id,
-      name: 'Bole Heights',
-      address: 'Bole Road, near Edna Mall',
-      city: 'Addis Ababa',
-      country: 'Ethiopia',
-    },
-    {
-      userId: owner1.id,
-      name: 'Kazanchis Tower',
-      address: 'Kazanchis, Africa Ave',
-      city: 'Addis Ababa',
-      country: 'Ethiopia',
-    },
-    {
-      userId: owner2.id,
-      name: 'CMC Plaza',
-      address: 'CMC area, Jemo',
-      city: 'Addis Ababa',
-      country: 'Ethiopia',
-    },
-    {
-      userId: owner2.id,
-      name: 'Sarbet Residences',
-      address: 'Sarbet, behind Bole Medhanialem',
-      city: 'Addis Ababa',
-      country: 'Ethiopia',
-    },
-    {
-      userId: owner3.id,
-      name: 'Piassa Commercial',
-      address: 'Piassa, Churchill Ave',
-      city: 'Addis Ababa',
-      country: 'Ethiopia',
-    },
-  ];
-
-  const buildings: { id: string; userId: string; name: string }[] = [];
-  for (const b of buildingsData) {
-    const existing = await prisma.building.findFirst({
-      where: { userId: b.userId, name: b.name },
-    });
-    if (existing) {
-      buildings.push({
-        id: existing.id,
-        userId: existing.userId,
-        name: existing.name,
-      });
-    } else {
-      const created = await prisma.building.create({
-        data: {
-          userId: b.userId,
-          name: b.name,
-          address: b.address,
-          city: b.city,
-          country: b.country,
-          contactEmail: b.userId === owner1.id ? 'bole@test.com' : undefined,
-          contactPhone: '+251111000000',
-          status: 'active',
-        },
-      });
-      buildings.push({
-        id: created.id,
-        userId: created.userId,
-        name: created.name,
-      });
-    }
-  }
-  const [boleHeights, kazanchisTower, cmcPlaza, sarbetRes, piassaComm] =
-    buildings;
-  console.log('Buildings created/ensured:', buildings.length);
-
-  // ---------- Managers (some with multiple buildings) ----------
-  const managersData = [
-    { email: 'manager1@test.com', name: 'Manager One', phone: '+251941111111' },
-    { email: 'manager2@test.com', name: 'Manager Two', phone: '+251942222222' },
-    {
-      email: 'manager3@test.com',
-      name: 'Manager Three',
-      phone: '+251943333333',
-    },
-    {
-      email: 'manager4@test.com',
-      name: 'Manager Four',
-      phone: '+251944444444',
-    },
-  ];
-
-  const managers: { id: string; email: string }[] = [];
-  const ownerForManager = [owner1.id, owner1.id, owner2.id, owner3.id]; // m1,m2 -> owner1; m3 -> owner2; m4 -> owner3
-  for (let mi = 0; mi < managersData.length; mi++) {
-    const m = managersData[mi];
-    const existing = await prisma.manager.findFirst({
-      where: { email: m.email, deletedAt: null },
-    });
-    const mgr = existing
-      ? await prisma.manager.update({
-          where: { id: existing.id },
-          data: {},
-        })
-      : await prisma.manager.create({
-          data: {
-            userId: ownerForManager[mi],
-            name: m.name,
-            email: m.email,
-            passwordHash: hashedPassword,
-            phone: m.phone,
-            status: 'active',
-            mustResetPassword: false,
-          },
-        });
-    managers.push({ id: mgr.id, email: mgr.email });
-  }
-  const [m1, m2, m3, m4] = managers;
-  console.log('Managers created/updated:', managers.length);
-
-  // ManagerBuildingRole: m1 -> Bole + Kazanchis; m2 -> Bole only; m3 -> Kazanchis + CMC; m4 -> CMC + Sarbet + Piassa
-  const roleAssignments: {
-    managerId: string;
-    buildingId: string;
-    roles: (
-      | 'tenant_manager'
-      | 'payment_manager'
-      | 'maintenance_manager'
-      | 'operations_manager'
-      | 'reports_viewer'
-    )[];
-  }[] = [
-    {
-      managerId: m1.id,
-      buildingId: boleHeights.id,
-      roles: ['tenant_manager', 'payment_manager', 'reports_viewer'],
-    },
-    {
-      managerId: m1.id,
-      buildingId: kazanchisTower.id,
-      roles: ['payment_manager', 'reports_viewer'],
-    },
-    {
-      managerId: m2.id,
-      buildingId: boleHeights.id,
-      roles: ['maintenance_manager', 'operations_manager'],
-    },
-    {
-      managerId: m3.id,
-      buildingId: kazanchisTower.id,
-      roles: ['tenant_manager', 'maintenance_manager'],
-    },
-    {
-      managerId: m3.id,
-      buildingId: cmcPlaza.id,
-      roles: ['operations_manager', 'reports_viewer'],
-    },
-    {
-      managerId: m4.id,
-      buildingId: cmcPlaza.id,
-      roles: ['tenant_manager', 'payment_manager'],
-    },
-    {
-      managerId: m4.id,
-      buildingId: sarbetRes.id,
-      roles: ['payment_manager', 'maintenance_manager', 'reports_viewer'],
-    },
-    {
-      managerId: m4.id,
-      buildingId: piassaComm.id,
-      roles: ['operations_manager'],
-    },
-  ];
-
-  for (const ra of roleAssignments) {
-    const existing = await prisma.managerBuildingRole.findFirst({
-      where: {
-        managerId: ra.managerId,
-        buildingId: ra.buildingId,
-        deletedAt: null,
+  // ---------- Buildings + units ----------
+  const buildings = new Map<
+    string,
+    { id: string; owner: string; config: (typeof BUILDINGS)[number] }
+  >();
+  const unitsByBuilding = new Map<
+    string,
+    { id: string; unitNumber: string }[]
+  >();
+  for (const b of BUILDINGS) {
+    const owner = owners.get(b.owner)!;
+    const building = await prisma.building.create({
+      data: {
+        userId: owner.id,
+        name: b.name,
+        address: b.address,
+        city: 'Addis Ababa',
+        country: 'Ethiopia',
+        contactEmail: `${b.key}@test.com`,
+        contactPhone: '+251111000000',
+        vatRate: b.vatRate,
+        withholdingRate: b.withholdingRate,
+        paymentCollectionDay: b.paymentCollectionDay,
+        totalParkingLots: b.totalParkingLots,
+        paymentGraceDays: 5,
+        status: 'active',
       },
+      select: { id: true },
     });
-    if (existing) {
-      await prisma.managerBuildingRole.update({
-        where: { id: existing.id },
-        data: { roles: ra.roles },
-      });
-    } else {
+    buildings.set(b.key, { id: building.id, owner: b.owner, config: b });
+
+    const units: { id: string; unitNumber: string }[] = [];
+    for (let i = 0; i < UNIT_NUMBERS.length; i++) {
+      const floor = Math.floor(i / 2) + 1;
+      units.push(
+        await prisma.unit.create({
+          data: {
+            buildingId: building.id,
+            unitNumber: UNIT_NUMBERS[i],
+            floor,
+            size: 40 + (i % 2) * 20,
+            type: b.unitTypes[i],
+            rentPrice: b.baseRent + (floor - 1) * 1500,
+            status: 'vacant',
+          },
+          select: { id: true, unitNumber: true },
+        }),
+      );
+    }
+    unitsByBuilding.set(b.key, units);
+  }
+  console.log(
+    'Buildings:',
+    buildings.size,
+    '— units:',
+    buildings.size * UNIT_NUMBERS.length,
+  );
+
+  // ---------- Managers ----------
+  for (const m of MANAGERS) {
+    const manager = await prisma.manager.create({
+      data: {
+        userId: owners.get(m.owner)!.id,
+        name: m.name,
+        email: m.email,
+        phone: m.phone,
+        passwordHash,
+        status: 'active',
+        mustResetPassword: false,
+      },
+      select: { id: true },
+    });
+    for (const assignment of m.buildings) {
+      const building = buildings.get(assignment.building)!;
+      if (building.owner !== m.owner) {
+        throw new Error(`${m.email} assigned to another owner's building`);
+      }
       await prisma.managerBuildingRole.create({
         data: {
-          managerId: ra.managerId,
-          buildingId: ra.buildingId,
-          roles: ra.roles,
+          managerId: manager.id,
+          buildingId: building.id,
+          roles: assignment.roles,
         },
       });
     }
   }
-  console.log('Manager-building roles assigned.');
+  console.log('Managers:', MANAGERS.length);
 
-  // ---------- Units (per building) ----------
-  const unitRows: {
-    buildingId: string;
-    unitNumber: string;
-    floor: number;
-    rentPrice: number;
-    type: 'retail' | 'office' | 'other';
-  }[] = [];
-  const buildingIds = buildings.map((b) => b.id);
-  const unitNumbers = ['101', '102', '201', '202', '301', '302', '401', '501'];
-  for (const buildingId of buildingIds) {
-    for (let i = 0; i < unitNumbers.length; i++) {
-      const un = unitNumbers[i];
-      const floor = Math.floor(i / 2) + 1;
-      const rentPrice =
-        8000 + (floor - 1) * 2000 + Math.floor(Math.random() * 1000);
-      const type: 'retail' | 'office' | 'other' =
-        i % 3 === 0 ? 'retail' : i % 3 === 1 ? 'office' : 'other';
-      unitRows.push({ buildingId, unitNumber: un, floor, rentPrice, type });
-    }
-  }
+  // ---------- Tenants, leases, cycles, payments ----------
+  let tenantNo = 0;
+  let plateNo = 10000;
+  let paymentCount = 0;
+  const firstBuildingKey = BUILDINGS[0].key;
 
-  const unitsCreated: {
-    id: string;
-    buildingId: string;
-    unitNumber: string;
-    rentPrice: number;
-  }[] = [];
-  for (const u of unitRows) {
-    const existing = await prisma.unit.findFirst({
-      where: {
-        buildingId: u.buildingId,
-        unitNumber: u.unitNumber,
-        deletedAt: null,
-      },
-    });
-    if (existing) {
-      unitsCreated.push({
-        id: existing.id,
-        buildingId: existing.buildingId,
-        unitNumber: existing.unitNumber,
-        rentPrice: Number(existing.rentPrice),
-      });
-    } else {
-      const created = await prisma.unit.create({
-        data: {
-          buildingId: u.buildingId,
-          unitNumber: u.unitNumber,
-          floor: u.floor,
-          rentPrice: u.rentPrice,
-          type: u.type,
-          status: 'vacant',
-        },
-      });
-      unitsCreated.push({
-        id: created.id,
-        buildingId: created.buildingId,
-        unitNumber: created.unitNumber,
-        rentPrice: Number(created.rentPrice),
-      });
-    }
-  }
-  console.log('Units created/ensured:', unitsCreated.length);
-
-  // ---------- Tenants (unique emails) ----------
-  let tenantIndex = 0;
-  function nextTenantEmail() {
-    tenantIndex += 1;
-    return `tenant${tenantIndex}@test.com`;
-  }
-
-  const tenantsByBuilding = new Map<
-    string,
-    { id: string; buildingId: string; name: string; email: string }[]
-  >();
-  for (const b of buildings) {
-    const count = 4 + Math.floor(Math.random() * 3); // 4–6 tenants per building
-    const list: {
-      id: string;
-      buildingId: string;
-      name: string;
-      email: string;
+  for (const [key, building] of buildings) {
+    const { config } = building;
+    const units = unitsByBuilding.get(key)!;
+    const owner = owners.get(building.owner)!;
+    const drafts: PaymentDraft[] = [];
+    const activeLeases: {
+      slot: number;
+      leaseId: string;
+      tenantId: string;
+      unitId: string;
     }[] = [];
-    for (let i = 0; i < count; i++) {
-      const email = nextTenantEmail();
-      const names = [
-        'Sara Ahmed',
-        'Yonas Desta',
-        'Meron Tesfaye',
-        'Habtamu Girma',
-        'Ephrem Tadesse',
-        'Helen Getachew',
-        'Kaleb Abebe',
-        'Dina Mohammed',
-      ];
-      const name = names[(tenantIndex - 1) % names.length] + ` ${tenantIndex}`;
-      const existingTenant = await prisma.tenant.findFirst({
-        where: { buildingId: b.id, email, deletedAt: null },
+
+    const createTenant = async (active: boolean) => {
+      tenantNo += 1;
+      return prisma.tenant.create({
+        data: {
+          buildingId: building.id,
+          name: TENANT_NAMES[(tenantNo - 1) % TENANT_NAMES.length],
+          email: `tenant${tenantNo}@test.com`,
+          phone: `+2519700000${String(tenantNo).padStart(2, '0')}`,
+          tin:
+            tenantNo % 2 === 0
+              ? `00${String(tenantNo).padStart(8, '0')}`
+              : undefined,
+          passwordHash,
+          status: active ? 'active' : 'inactive',
+        },
+        select: { id: true },
       });
-      const tenant = existingTenant
-        ? await prisma.tenant.update({
-            where: { id: existingTenant.id },
-            data: {},
-          })
-        : await prisma.tenant.create({
-            data: {
-              buildingId: b.id,
-              name,
-              email,
-              phone: `+25197${String(tenantIndex).padStart(6, '0')}`,
-              passwordHash: hashedPassword,
-              status: 'active',
-            },
-          });
-      list.push({
-        id: tenant.id,
-        buildingId: b.id,
-        name: tenant.name,
-        email: tenant.email,
-      });
-    }
-    tenantsByBuilding.set(b.id, list);
-  }
-  console.log('Tenants created/updated.');
+    };
 
-  // ---------- Leases (assign tenants to units; some units stay vacant) ----------
-  const leasesCreated: {
-    id: string;
-    tenantId: string;
-    unitId: string;
-    buildingId: string;
-    rentAmount: number;
-    startDate: Date;
-    endDate: Date;
-  }[] = [];
-  let invoiceCounter = 1000;
-
-  for (const b of buildings) {
-    const tenants = tenantsByBuilding.get(b.id) || [];
-    const buildingUnits = unitsCreated.filter((u) => u.buildingId === b.id);
-    const occupiedCount = Math.min(tenants.length, buildingUnits.length - 1); // leave at least 1 vacant
-    for (let i = 0; i < occupiedCount; i++) {
-      const tenant = tenants[i];
-      const unit = buildingUnits[i];
-      const startDate = new Date();
-      startDate.setMonth(startDate.getMonth() - (i % 6)); // spread start dates
-      startDate.setDate(1);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = addMonths(startDate, 12);
-      const rentAmount = unit.rentPrice;
-
-      const existingLease = await prisma.lease.findFirst({
-        where: { unitId: unit.id, status: 'active' },
-      });
-      if (existingLease) continue;
-
+    /** Creates the lease + its cycles and queues payments for paid ones. */
+    const createLease = async (args: {
+      tenantId: string;
+      unitId: string;
+      start: Date;
+      end: Date;
+      rent: number;
+      unpaid: number;
+      carsAllowed: number;
+      applyWithholding: boolean;
+      status: 'active' | 'expired';
+    }) => {
       const lease = await prisma.lease.create({
         data: {
-          tenantId: tenant.id,
-          unitId: unit.id,
-          buildingId: b.id,
-          startDate,
-          endDate,
-          rentAmount,
-          securityDeposit: rentAmount,
-          status: 'active',
+          buildingId: building.id,
+          tenantId: args.tenantId,
+          unitId: args.unitId,
+          startDate: args.start,
+          endDate: args.end,
+          rentAmount: args.rent,
+          securityDeposit: args.rent * 2,
+          carsAllowed: args.carsAllowed,
+          useDefaultPaymentDay: true,
+          paymentCollectionDay: config.paymentCollectionDay,
+          applyWithholding: args.applyWithholding,
+          status: args.status,
         },
+        select: { id: true },
       });
-      leasesCreated.push({
-        id: lease.id,
+
+      const cycles = generateCycles(
+        args.start,
+        args.end,
+        config.paymentCollectionDay,
+        args.rent,
+      );
+      const dueCount = cycles.filter((c) => c.periodStart <= today).length;
+
+      for (const [idx, c] of cycles.entries()) {
+        const isDue = c.periodStart <= today;
+        const isPaid = isDue && idx < dueCount - args.unpaid;
+        const isOverdue = isDue && !isPaid && addDays(c.periodStart, 5) < today;
+        const period = await prisma.paymentPeriod.create({
+          data: {
+            leaseId: lease.id,
+            month: c.month,
+            periodStart: c.periodStart,
+            periodEnd: c.periodEnd,
+            daysInCycle: c.daysInCycle,
+            rentAmount: c.rentAmount,
+            status: isOverdue ? 'overdue' : 'unpaid',
+          },
+          select: { id: true },
+        });
+        if (!isPaid) continue;
+
+        const tax = computeRentTaxBreakdown(
+          c.rentAmount,
+          config.vatRate,
+          config.withholdingRate,
+          args.applyWithholding,
+        );
+        const paidOn = addDays(c.periodStart, 2);
+        drafts.push({
+          tenantId: args.tenantId,
+          unitId: args.unitId,
+          type: 'rent',
+          paymentDate: paidOn < today ? paidOn : today,
+          baseAmount: c.rentAmount,
+          vatAmount: tax.vatAmount,
+          withholdingAmount: tax.withholdingAmount,
+          totalAmount: tax.totalAmount,
+          items: [
+            { description: 'Base Rent', amount: c.rentAmount },
+            ...(tax.vatAmount > 0
+              ? [
+                  {
+                    description: `VAT (${config.vatRate}%)`,
+                    amount: tax.vatAmount,
+                  },
+                ]
+              : []),
+            ...(tax.withholdingAmount > 0
+              ? [
+                  {
+                    description: `Withholding (${config.withholdingRate}%)`,
+                    amount: -tax.withholdingAmount,
+                  },
+                ]
+              : []),
+          ],
+          periodIds: [period.id],
+        });
+      }
+
+      // Security deposit collected when the lease started
+      drafts.push({
+        tenantId: args.tenantId,
+        unitId: args.unitId,
+        type: 'deposit',
+        paymentDate: args.start < today ? args.start : today,
+        baseAmount: args.rent * 2,
+        vatAmount: 0,
+        withholdingAmount: 0,
+        totalAmount: args.rent * 2,
+        items: [{ description: 'Deposit Payment', amount: args.rent * 2 }],
+        periodIds: [],
+      });
+      return lease;
+    };
+
+    for (const [slot, spec] of LEASE_SLOTS.entries()) {
+      const unit = units[slot];
+      const tenant = await createTenant(true);
+      const start = shiftMonths(
+        today,
+        -spec.monthsAgo,
+        spec.midMonth ? 15 : config.paymentCollectionDay,
+      );
+      const end = addDays(shiftMonths(start, 12), -1);
+      const rent = config.baseRent + Math.floor(slot / 2) * 1500;
+      const lease = await createLease({
         tenantId: tenant.id,
         unitId: unit.id,
-        buildingId: b.id,
-        rentAmount,
-        startDate,
-        endDate,
+        start,
+        end,
+        rent,
+        unpaid: spec.unpaid,
+        carsAllowed: spec.carsAllowed,
+        applyWithholding: spec.applyWithholding && config.withholdingRate > 0,
+        status: 'active',
       });
-
-      // Mark unit occupied
       await prisma.unit.update({
         where: { id: unit.id },
-        data: { status: 'occupied' },
+        data: { status: 'occupied', rentPrice: rent },
       });
-
-      // Payment periods (last 6 months + current + next 2)
-      const months: string[] = [];
-      const from = new Date();
-      from.setMonth(from.getMonth() - 6);
-      from.setDate(1);
-      for (let m = 0; m < 10; m++) {
-        const d = addMonths(from, m);
-        months.push(monthString(d));
-      }
-      for (const month of months) {
-        const [y, mo] = month.split('-').map(Number);
-        const periodStart = new Date(y, mo - 1, 1);
-        const isPast = periodStart < new Date();
-        const paid = isPast && Math.random() > 0.3; // ~70% of past periods paid
-        await prisma.paymentPeriod.upsert({
-          where: { leaseId_month: { leaseId: lease.id, month } },
-          update: {},
-          create: {
-            leaseId: lease.id,
-            month,
-            rentAmount,
-            status: paid ? 'paid' : isPast ? 'overdue' : 'unpaid',
-            paidAt: paid ? addMonths(periodStart, 1) : undefined,
-          },
-        });
-      }
-
-      // Invoices (one per tenant for recent months)
-      const invNum = `INV-${++invoiceCounter}`;
-      const dueDate = addMonths(new Date(), 1);
-      const inv = await prisma.invoice.create({
-        data: {
-          buildingId: b.id,
-          unitId: unit.id,
-          tenantId: tenant.id,
-          invoiceNumber: invNum,
-          amount: rentAmount,
-          dueDate,
-          status: Math.random() > 0.5 ? 'sent' : 'paid',
-          items: [{ description: 'Monthly rent', amount: rentAmount }],
-        },
-      });
-
-      // Some payments (rent type, some linked to invoice)
-      if (Math.random() > 0.4) {
-        const pay = await prisma.payment.create({
+      for (let p = 0; p < spec.plates; p++) {
+        await prisma.parkingRegistration.create({
           data: {
-            buildingId: b.id,
-            unitId: unit.id,
+            buildingId: building.id,
+            leaseId: lease.id,
             tenantId: tenant.id,
-            invoiceId: inv.id,
-            amount: rentAmount,
-            type: 'rent',
-            status: 'completed',
-            paymentDate: new Date(),
-            notes: 'Seed test payment',
+            unitId: unit.id,
+            licensePlate: `3-AA-${++plateNo}`,
           },
         });
-        // Link one payment period to this payment
-        const period = await prisma.paymentPeriod.findFirst({
-          where: { leaseId: lease.id, status: 'unpaid' },
+      }
+      activeLeases.push({
+        slot,
+        leaseId: lease.id,
+        tenantId: tenant.id,
+        unitId: unit.id,
+      });
+    }
+
+    // Slot 4: an expired lease that still owes its last cycle (the tenant
+    // stays active until it is settled; the unit is free again), or a
+    // prospect tenant with no lease yet
+    if (key === firstBuildingKey) {
+      const tenant = await createTenant(true);
+      const start = shiftMonths(today, -14, config.paymentCollectionDay);
+      const end = addDays(shiftMonths(start, 12), -1);
+      await createLease({
+        tenantId: tenant.id,
+        unitId: units[4].id,
+        start,
+        end,
+        rent: config.baseRent + 3000,
+        unpaid: 1,
+        carsAllowed: 0,
+        applyWithholding: false,
+        status: 'expired',
+      });
+    } else {
+      await createTenant(false);
+    }
+
+    // Receipts are numbered in payment order, per building and year
+    drafts.sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
+    const counters = new Map<number, number>();
+    for (const d of drafts) {
+      const year = d.paymentDate.getUTCFullYear();
+      const seq = (counters.get(year) ?? 0) + 1;
+      counters.set(year, seq);
+      const invoice = await prisma.invoice.create({
+        data: {
+          buildingId: building.id,
+          tenantId: d.tenantId,
+          unitId: d.unitId,
+          invoiceNumber: `INV-${year}-${String(seq).padStart(5, '0')}`,
+          amount: d.totalAmount,
+          dueDate: d.paymentDate,
+          status: 'paid',
+          items: d.items,
+        },
+        select: { id: true },
+      });
+      const payment = await prisma.payment.create({
+        data: {
+          buildingId: building.id,
+          tenantId: d.tenantId,
+          unitId: d.unitId,
+          invoiceId: invoice.id,
+          amount: d.totalAmount,
+          baseAmount: d.type === 'rent' ? d.baseAmount : undefined,
+          vatAmount: d.type === 'rent' ? d.vatAmount : undefined,
+          withholdingAmount:
+            d.type === 'rent' ? d.withholdingAmount : undefined,
+          type: d.type,
+          status: 'completed',
+          paymentDate: d.paymentDate,
+        },
+        select: { id: true },
+      });
+      if (d.periodIds.length > 0) {
+        await prisma.paymentPeriod.updateMany({
+          where: { id: { in: d.periodIds } },
+          data: {
+            status: 'paid',
+            paidAt: d.paymentDate,
+            paymentId: payment.id,
+          },
         });
-        if (period) {
-          await prisma.paymentPeriod.update({
-            where: { id: period.id },
-            data: { status: 'paid', paymentId: pay.id, paidAt: new Date() },
-          });
-        }
       }
     }
-  }
-  console.log('Leases, payment periods, invoices, and payments created.');
+    paymentCount += drafts.length;
 
-  // ---------- Extra invoices (overdue) for variety ----------
-  for (let bi = 0; bi < buildings.length; bi++) {
-    const b = buildings[bi];
-    const tenants = tenantsByBuilding.get(b.id) || [];
-    if (tenants.length === 0) continue;
-    const t = tenants[0];
-    const unit = unitsCreated.find((u) => u.buildingId === b.id);
-    if (!unit) continue;
-    const invNum = `INV-${2000 + bi}`;
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() - 15);
-    const existingInv = await prisma.invoice.findUnique({
-      where: {
-        buildingId_invoiceNumber: { buildingId: b.id, invoiceNumber: invNum },
+    // Tenant with room for a second car asks to register it
+    const withSpareSpot = activeLeases.find((l) => l.slot === 1)!;
+    await prisma.tenantParkingRequest.create({
+      data: {
+        buildingId: building.id,
+        tenantId: withSpareSpot.tenantId,
+        leaseId: withSpareSpot.leaseId,
+        unitId: withSpareSpot.unitId,
+        licensePlate: `3-AA-${++plateNo}`,
+        status: 'pending',
       },
     });
-    if (!existingInv) {
-      await prisma.invoice.create({
-        data: {
-          buildingId: b.id,
-          unitId: unit.id,
-          tenantId: t.id,
-          invoiceNumber: invNum,
-          amount: unit.rentPrice,
-          dueDate,
-          status: 'overdue',
-          items: [{ description: 'Rent arrears', amount: unit.rentPrice }],
-        },
-      });
-    }
-  }
 
-  // ---------- Maintenance requests ----------
-  for (const b of buildings) {
-    const tenants = tenantsByBuilding.get(b.id) || [];
-    const buildingUnits = unitsCreated.filter((u) => u.buildingId === b.id);
-    if (tenants.length === 0 || buildingUnits.length === 0) continue;
-    const priorities: ('low' | 'medium' | 'high' | 'urgent')[] = [
-      'low',
-      'medium',
-      'high',
-      'urgent',
-    ];
-    const statuses: ('pending' | 'in_progress' | 'completed' | 'cancelled')[] =
-      ['pending', 'in_progress', 'completed', 'cancelled'];
-    for (let i = 0; i < 3; i++) {
-      const tenant = tenants[i % tenants.length];
-      const unit = buildingUnits[i % buildingUnits.length];
+    for (const m of MAINTENANCE) {
+      const lease = activeLeases.find((l) => l.slot === m.slot)!;
       await prisma.maintenanceRequest.create({
         data: {
-          buildingId: b.id,
-          unitId: unit.id,
-          tenantId: tenant.id,
-          title: `Seed request ${i + 1}: ${i === 0 ? 'Leak' : i === 1 ? 'AC repair' : 'Door lock'}`,
-          description: 'Test maintenance request for seed data.',
-          priority: priorities[i],
-          status: statuses[i],
-          completedAt: statuses[i] === 'completed' ? new Date() : undefined,
+          buildingId: building.id,
+          unitId: lease.unitId,
+          tenantId: lease.tenantId,
+          title: m.title,
+          description: m.description,
+          priority: m.priority,
+          status: m.status,
+          completedAt:
+            m.status === 'completed' ? addDays(today, -2) : undefined,
         },
       });
     }
-  }
-  console.log('Maintenance requests created.');
 
-  // ---------- Announcements ----------
-  for (const b of buildings) {
     await prisma.announcement.create({
       data: {
-        buildingId: b.id,
-        title: 'Welcome to ' + b.name,
-        content: 'This is seed test announcement content. Please ignore.',
-        priority: 'normal',
-        publishedAt: new Date(),
+        buildingId: building.id,
+        title: 'Scheduled water interruption',
+        content: `Water supply at ${config.name} will be off this Saturday from 9:00 to 13:00 for tank cleaning. Please store water in advance.`,
+        priority: 'important',
+        publishedAt: addDays(today, -3),
+        createdById: owner.id,
+        createdByName: owner.name,
       },
     });
   }
-  console.log('Announcements created.');
 
-  console.log('\n--- Seed full completed ---');
-  console.log('Owner logins (password for all: ' + TEST_PASSWORD + '):');
-  console.log('  owner1@test.com, owner2@test.com, owner3@test.com');
-  console.log('Manager logins (same password):');
+  // One unpublished draft to show the draft state
+  await prisma.announcement.create({
+    data: {
+      buildingId: buildings.get(firstBuildingKey)!.id,
+      title: 'Parking lot repainting',
+      content:
+        'The parking lot will be repainted next month. Details to follow.',
+      priority: 'normal',
+      createdById: owners.get('o1')!.id,
+      createdByName: owners.get('o1')!.name,
+    },
+  });
+
+  console.log(`Tenants: ${tenantNo} — payments/receipts: ${paymentCount}`);
   console.log(
-    '  manager1@test.com, manager2@test.com, manager3@test.com, manager4@test.com',
+    '\n--- Demo seed complete (password for all: ' + DEMO_PASSWORD + ') ---',
   );
   console.log(
-    'Tenant logins: tenant1@test.com, tenant2@test.com, ... (same password)',
+    'Owners:   owner1@test.com (Pro), owner2@test.com (Pro), owner3@test.com (Free trial)',
   );
+  console.log('Managers: manager1@test.com … manager4@test.com');
+  console.log(`Tenants:  tenant1@test.com … tenant${tenantNo}@test.com`);
 }
 
 main()

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
 import { PdfService } from 'src/common/pdf/pdf.service';
-import { parseInvoiceItems } from 'src/common/pdf/invoice-items.util';
+import { loadPaymentInvoice } from 'src/common/pdf/payment-invoice.loader';
 import { buildPageInfo } from 'src/common/pagination';
 
 const invoiceInclude = {
@@ -73,26 +73,8 @@ export class InvoicesService {
 
   async downloadInvoice(id: string, buildingId: string) {
     const invoice = await this.findOne(id, buildingId);
-
-    const building = await this.prisma.building.findUnique({
-      where: { id: buildingId },
-      select: { name: true, address: true },
-    });
-
-    return this.pdfService.generatePaymentInvoice({
-      invoiceNumber: invoice.invoiceNumber,
-      date: invoice.createdAt,
-      dueDate: invoice.dueDate,
-      buildingName: building?.name || 'Building',
-      buildingAddress: building?.address || undefined,
-      tenantName: invoice.tenant?.name || 'Tenant',
-      tenantEmail: invoice.tenant?.email || '',
-      items: parseInvoiceItems(invoice.items, {
-        description: `Rent for Unit ${invoice.unit?.unitNumber || 'N/A'}`,
-        amount: Number(invoice.amount),
-      }),
-      total: Number(invoice.amount),
-      status: invoice.status,
-    });
+    return this.pdfService.generatePaymentInvoice(
+      await loadPaymentInvoice(this.prisma, invoice.id),
+    );
   }
 }

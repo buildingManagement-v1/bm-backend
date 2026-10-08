@@ -244,6 +244,7 @@ export class ReportsService {
     return { buildings: result };
   }
 
+  /** Owners: all their buildings; managers: those they can view reports for */
   private async getBuildingIdsForUser(
     userId: string,
     userRole: string,
@@ -253,6 +254,7 @@ export class ReportsService {
         where: {
           managerId: userId,
           deletedAt: null,
+          roles: { has: 'reports_viewer' },
           building: { deletedAt: null },
         },
         include: { building: { select: { id: true, name: true } } },

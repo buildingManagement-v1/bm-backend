@@ -6,9 +6,11 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class LoginManagerDto {
   @ApiProperty({ example: 'manager@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

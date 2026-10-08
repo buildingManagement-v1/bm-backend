@@ -11,7 +11,7 @@ import { computeRentTaxBreakdown } from 'src/common/tax/rent-period.util';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getStats(buildingId: string) {
+  async getStats(buildingId: string, includeRevenue: boolean) {
     const today = todayDate();
     const firstDayOfMonth = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
@@ -69,7 +69,9 @@ export class DashboardService {
       totalUnits,
       occupiedUnits,
       occupancyRate: Math.round(occupancyRate * 100) / 100,
-      revenueThisMonth: Number(revenueThisMonth._sum.amount || 0),
+      revenueThisMonth: includeRevenue
+        ? Number(revenueThisMonth._sum.amount || 0)
+        : null,
       pendingMaintenanceRequests: pendingRequests,
     };
   }

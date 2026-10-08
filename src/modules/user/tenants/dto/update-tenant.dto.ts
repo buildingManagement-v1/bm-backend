@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { TenantStatus } from 'generated/prisma/enums';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class UpdateTenantDto {
   @ApiProperty({ example: 'Alice Smith', required: false })
@@ -10,6 +11,7 @@ export class UpdateTenantDto {
 
   @ApiProperty({ example: 'alice@example.com', required: false })
   @IsOptional()
+  @NormalizeEmail()
   @IsEmail()
   email?: string;
 

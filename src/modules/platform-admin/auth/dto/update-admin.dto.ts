@@ -8,6 +8,7 @@ import {
   IsOptional,
 } from 'class-validator';
 import { PlatformAdminRole, AdminStatus } from 'generated/prisma/client';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class UpdateAdminDto {
   @ApiProperty({ example: 'Admin Name', required: false })
@@ -16,6 +17,7 @@ export class UpdateAdminDto {
   name?: string;
 
   @ApiProperty({ example: 'admin@bms.com', required: false })
+  @NormalizeEmail()
   @IsEmail()
   @IsOptional()
   email?: string;

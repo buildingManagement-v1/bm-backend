@@ -6,6 +6,7 @@ import {
   MinLength,
   IsOptional,
 } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class RegisterUserDto {
   @ApiProperty({ example: 'John Doe' })
@@ -14,6 +15,7 @@ export class RegisterUserDto {
   name: string;
 
   @ApiProperty({ example: 'user@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

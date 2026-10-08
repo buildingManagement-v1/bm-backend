@@ -7,9 +7,11 @@ import {
   IsUUID,
   MinLength,
 } from 'class-validator';
+import { NormalizeEmail } from '../../../../common/decorators/normalize-email.decorator';
 
 export class TenantLoginDto {
   @ApiProperty({ example: 'tenant@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;

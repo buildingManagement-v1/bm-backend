@@ -31,9 +31,9 @@ export class ManagerRolesGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.get<ManagerRole[]>(
+    const requiredRoles = this.reflector.getAllAndOverride<ManagerRole[]>(
       MANAGER_ROLES_KEY,
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
 
     if (!requiredRoles || requiredRoles.length === 0) {

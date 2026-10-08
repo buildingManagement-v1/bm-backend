@@ -39,6 +39,11 @@ export class MaintenanceRequestsController {
   ) {}
 
   @Post()
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(
+    ManagerRole.maintenance_manager,
+    ManagerRole.operations_manager,
+  )
   @ApiOperation({ summary: 'Create maintenance request' })
   @ApiResponse({
     status: 201,
@@ -63,6 +68,11 @@ export class MaintenanceRequestsController {
   }
 
   @Get()
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(
+    ManagerRole.maintenance_manager,
+    ManagerRole.operations_manager,
+  )
   @ApiOperation({ summary: 'Get all maintenance requests (paginated)' })
   @ApiResponse({
     status: 200,
@@ -95,6 +105,11 @@ export class MaintenanceRequestsController {
   }
 
   @Get(':id')
+  @UseGuards(ManagerRolesGuard)
+  @RequireManagerRoles(
+    ManagerRole.maintenance_manager,
+    ManagerRole.operations_manager,
+  )
   @ApiOperation({ summary: 'Get maintenance request by ID' })
   @ApiResponse({
     status: 200,
